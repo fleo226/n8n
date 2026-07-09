@@ -382,7 +382,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 			data-testid="agent-capabilities-section"
 		>
 			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="toolRows.length > 0">
+				<N8nText bold v-if="toolRows.length > 0" :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.tools.title') }}
 				</N8nText>
 
@@ -466,7 +466,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 			</div>
 
 			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="skills.length > 0">
+				<N8nText bold v-if="skills.length > 0" :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.skills.title') }}
 				</N8nText>
 
@@ -507,7 +507,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 				</div>
 			</div>
 			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="selectedSubAgents.length > 0">
+				<N8nText bold v-if="selectedSubAgents.length > 0" :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.subAgents.title') }}
 				</N8nText>
 
@@ -548,7 +548,7 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 				</div>
 			</div>
 			<div :class="$style.capabilityRow">
-				<N8nText bold v-if="taskRows.length > 0">
+				<N8nText bold v-if="taskRows.length > 0" :class="$style.rowLabel">
 					{{ i18n.baseText('agents.builder.tasks.title') }}
 				</N8nText>
 
@@ -606,8 +606,14 @@ function openExistingSubAgentModal(subAgent: { id: string; name: string; useWhen
 
 .capabilityRow {
 	display: flex;
-	flex-direction: column;
+	align-items: flex-start;
 	gap: var(--spacing--2xs);
+}
+
+.rowLabel {
+	flex: 0 0 var(--width--label--sm);
+	line-height: var(--line-height--sm);
+	margin-top: var(--spacing--3xs);
 }
 
 .chips {

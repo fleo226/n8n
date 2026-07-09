@@ -1477,8 +1477,8 @@ function onPreviewBreadcrumbSelect(item: PathItem) {
 
 .showBuildChatButton {
 	position: absolute;
-	top: var(--spacing--sm);
-	left: var(--spacing--sm);
+	top: var(--spacing--2xs);
+	left: var(--spacing--2xs);
 	z-index: 3;
 }
 
