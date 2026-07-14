@@ -106,6 +106,7 @@ const i18n = useI18n();
 						:agent-id="agentId"
 						:project-id="projectId"
 						:is-published="Boolean(agent?.activeVersionId)"
+						:simple-channel-setup="artifactMode"
 						@update:connected-triggers="emit('update:connected-triggers', $event)"
 						@trigger-added="emit('trigger-added', $event)"
 						@agent-changed="emit('agent-changed')"
