@@ -36,4 +36,20 @@ export class WorkflowReviewRequestWorkflowRepository extends Repository<Workflow
 			order: { id: 'ASC' },
 		});
 	}
+
+	/** One workflow per review for now; multi-workflow "primary" selection can wait. */
+	async findWorkflowNamesByRequestIds(requestIds: string[]): Promise<Map<string, string>> {
+		if (requestIds.length === 0) {
+			return new Map();
+		}
+
+		const rows = await this.createQueryBuilder('wrw')
+			.innerJoin('workflow_entity', 'workflow', 'workflow.id = wrw.workflowId')
+			.select('wrw.workflowReviewRequestId', 'requestId')
+			.addSelect('workflow.name', 'workflowName')
+			.where('wrw.workflowReviewRequestId IN (:...requestIds)', { requestIds })
+			.getRawMany<{ requestId: string; workflowName: string }>();
+
+		return new Map(rows.map((row) => [row.requestId, row.workflowName]));
+	}
 }

@@ -9,6 +9,13 @@ import {
 	type WorkflowReviewRequestState,
 } from '../entities/workflow-review-request.ee';
 
+export type FindManyForInboxOptions = {
+	projectIds?: string[];
+	state?: WorkflowReviewRequestState;
+	limit: number;
+	cursor?: string;
+};
+
 @Service()
 export class WorkflowReviewRequestRepository extends Repository<WorkflowReviewRequest> {
 	constructor(dataSource: DataSource) {
@@ -67,5 +74,56 @@ export class WorkflowReviewRequestRepository extends Repository<WorkflowReviewRe
 			.andWhere('request.state = :state', { state })
 			.orderBy('request.createdAt', 'DESC')
 			.getOne();
+	}
+
+	async findManyForInbox(options: FindManyForInboxOptions): Promise<WorkflowReviewRequest[]> {
+		const { projectIds, state, limit, cursor } = options;
+
+		if (projectIds !== undefined && projectIds.length === 0) {
+			return [];
+		}
+
+		const queryBuilder = this.createQueryBuilder('review')
+			.orderBy('review.createdAt', 'DESC')
+			.addOrderBy('review.id', 'ASC');
+
+		if (projectIds !== undefined) {
+			queryBuilder.andWhere('review.projectId IN (:...projectIds)', { projectIds });
+		}
+
+		if (state !== undefined) {
+			queryBuilder.andWhere('review.state = :state', { state });
+		}
+
+		if (cursor) {
+			const cursorRow = await this.findOne({ where: { id: cursor } });
+			if (!cursorRow) {
+				return [];
+			}
+
+			queryBuilder.andWhere(
+				'(review.createdAt < :createdAt OR (review.createdAt = :createdAt AND review.id > :id))',
+				{ createdAt: cursorRow.createdAt, id: cursorRow.id },
+			);
+		}
+
+		queryBuilder.take(limit);
+
+		return await queryBuilder.getMany();
+	}
+
+	async existsAnyForProjects(projectIds?: string[]): Promise<boolean> {
+		if (projectIds !== undefined && projectIds.length === 0) {
+			return false;
+		}
+
+		const queryBuilder = this.createQueryBuilder('review').select('1');
+
+		if (projectIds !== undefined) {
+			queryBuilder.andWhere('review.projectId IN (:...projectIds)', { projectIds });
+		}
+
+		const row = await queryBuilder.limit(1).getRawOne();
+		return row !== undefined;
 	}
 }

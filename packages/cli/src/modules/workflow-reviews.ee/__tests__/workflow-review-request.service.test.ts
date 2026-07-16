@@ -1,4 +1,5 @@
 import type { CreateWorkflowReviewRequestDto } from '@n8n/api-types';
+import type { LicenseState } from '@n8n/backend-common';
 import type {
 	DbLockService,
 	Project,
@@ -18,6 +19,7 @@ import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { ConflictError } from '@/errors/response-errors/conflict.error';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
+import type { ProjectService } from '@/services/project.service.ee';
 import type { WorkflowReviewPolicyService } from '@/services/workflow-review-policy.service';
 import type { WorkflowFinderService } from '@/workflows/workflow-finder.service';
 import type { WorkflowHistoryService } from '@/workflows/workflow-history/workflow-history.service';
@@ -40,6 +42,8 @@ describe('WorkflowReviewRequestService', () => {
 	const requestRepository = mock<WorkflowReviewRequestRepository>();
 	const workflowRepository = mock<WorkflowReviewRequestWorkflowRepository>();
 	const authorRepository = mock<WorkflowReviewRequestAuthorRepository>();
+	const projectService = mock<ProjectService>();
+	const licenseState = mock<LicenseState>();
 	const dbLockService = mock<DbLockService>();
 	const tx = mock<EntityManager>();
 
@@ -51,11 +55,15 @@ describe('WorkflowReviewRequestService', () => {
 		requestRepository,
 		workflowRepository,
 		authorRepository,
+		projectService,
+		licenseState,
 		dbLockService,
 	);
 
 	beforeEach(() => {
 		vi.resetAllMocks();
+		process.env.N8N_ENV_FEAT_WORKFLOW_REVIEWS = 'true';
+		licenseState.isWorkflowReviewsLicensed.mockReturnValue(true);
 		// Feature enabled by default; the disabled path is exercised explicitly.
 		workflowReviewPolicyService.get.mockResolvedValue({ enabled: true });
 		// By default, run the critical section against the mocked transaction.
