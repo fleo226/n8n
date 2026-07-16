@@ -2,6 +2,7 @@ import { Service } from '@n8n/di';
 import type { EntityManager } from '@n8n/typeorm';
 import { DataSource, Repository } from '@n8n/typeorm';
 
+import { WorkflowEntity } from '../entities/workflow-entity';
 import { WorkflowReviewRequestWorkflow } from '../entities/workflow-review-request-workflow.ee';
 
 @Service()
@@ -43,8 +44,9 @@ export class WorkflowReviewRequestWorkflowRepository extends Repository<Workflow
 			return new Map();
 		}
 
+		// Join via entity so DB_TABLE_PREFIX is applied (postgres ITs).
 		const rows = await this.createQueryBuilder('wrw')
-			.innerJoin('workflow_entity', 'workflow', 'workflow.id = wrw.workflowId')
+			.innerJoin(WorkflowEntity, 'workflow', 'workflow.id = wrw.workflowId')
 			.select('wrw.workflowReviewRequestId', 'requestId')
 			.addSelect('workflow.name', 'workflowName')
 			.where('wrw.workflowReviewRequestId IN (:...requestIds)', { requestIds })
