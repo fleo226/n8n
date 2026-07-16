@@ -1,9 +1,11 @@
 <script lang="ts" setup>
 import type { WorkflowReviewRequestSummaryDto, WorkflowReviewRequestState } from '@n8n/api-types';
+import { onClickOutside } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from '@n8n/i18n';
 import { N8nCard, N8nHeading, N8nLoading, N8nTabs, N8nText } from '@n8n/design-system';
 import { useIntersectionObserver } from '@/app/composables/useIntersectionObserver';
+import TimeAgo from '@/app/components/TimeAgo.vue';
 
 const props = defineProps<{
 	items: WorkflowReviewRequestSummaryDto[];
@@ -17,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	select: [id: string];
+	clear: [];
 	'update:activeState': [state: WorkflowReviewRequestState];
 	loadMore: [];
 }>();
@@ -36,6 +39,12 @@ const { observe: observeForLoadMore } = useIntersectionObserver({
 	onIntersect: () => emit('loadMore'),
 });
 
+onClickOutside(listRef, () => {
+	if (props.selectedId) {
+		emit('clear');
+	}
+});
+
 watch(
 	[loadMoreSentinel, () => props.hasMore, () => props.loadingMore, () => props.items.length],
 	([sentinel, hasMore, loadingMore]) => {
@@ -48,6 +57,12 @@ watch(
 
 function onTabChange(value: string | number | boolean) {
 	emit('update:activeState', String(value) as WorkflowReviewRequestState);
+}
+
+function onListBackgroundClick() {
+	if (props.selectedId) {
+		emit('clear');
+	}
 }
 </script>
 
@@ -68,7 +83,7 @@ function onTabChange(value: string | number | boolean) {
 			/>
 		</div>
 
-		<div ref="listRef" :class="$style.list">
+		<div ref="listRef" :class="$style.list" @click.self="onListBackgroundClick">
 			<N8nLoading v-if="loading" :loading="true" :rows="4" />
 			<template v-else>
 				<N8nText
@@ -90,6 +105,24 @@ function onTabChange(value: string | number | boolean) {
 						<N8nText bold tag="h3" :class="$style.cardTitle">
 							{{ item.title }}
 						</N8nText>
+						<div :class="$style.cardMeta">
+							<N8nText
+								v-if="item.workflowName"
+								size="xsmall"
+								color="text-light"
+								:class="$style.workflowName"
+								data-test-id="workflow-review-request-workflow-name"
+							>
+								{{ item.workflowName }}
+							</N8nText>
+							<N8nText
+								size="xsmall"
+								color="text-light"
+								data-test-id="workflow-review-request-created-at"
+							>
+								<TimeAgo :date="item.createdAt" />
+							</N8nText>
+						</div>
 					</div>
 				</N8nCard>
 				<div v-if="loadingMore" :class="$style.loadingMore">
@@ -165,6 +198,24 @@ function onTabChange(value: string | number | boolean) {
 	white-space: nowrap;
 	width: 100%;
 	font-size: var(--font-size--sm);
+}
+
+.cardMeta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--spacing--2xs);
+	width: 100%;
+	min-width: 0;
+}
+
+.workflowName {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	max-width: 70%;
 }
 
 .loadingMore {

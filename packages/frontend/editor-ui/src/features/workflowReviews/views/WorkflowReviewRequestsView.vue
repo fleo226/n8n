@@ -58,6 +58,7 @@ onUnmounted(() => {
 				:has-more="hasMore"
 				:is-empty="isEmpty"
 				@select="store.selectItem"
+				@clear="store.clearSelection"
 				@update:active-state="store.setActiveState"
 				@load-more="store.loadMore"
 			/>
