@@ -188,7 +188,6 @@ defineExpose({
 					:is-read-only="false"
 					:show-options="!isFixedCollectionType"
 					:show-expression-selector="!isFixedCollectionType"
-					:show-focus-panel="false"
 					:is-value-expression="isValueExpression"
 					@update:model-value="optionSelected"
 					@menu-expanded="onMenuExpanded"
