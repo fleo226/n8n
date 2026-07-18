@@ -294,8 +294,18 @@ describe('InstanceAiSettingsService', () => {
 			const result = await service.updateAdminSettings({ modelCredentialId: null });
 
 			expect(result).toMatchObject({ modelCredentialId: null, modelName: null });
-			const persisted = JSON.parse(settingsRepository.upsert.mock.calls[0][0].value);
-			expect(persisted).toMatchObject({ modelCredentialId: null, modelName: null });
+			expect(settingsRepository.upsert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					value: expect.stringContaining('"modelCredentialId":null'),
+				}),
+				['key'],
+			);
+			expect(settingsRepository.upsert).toHaveBeenCalledWith(
+				expect.objectContaining({
+					value: expect.stringContaining('"modelName":null'),
+				}),
+				['key'],
+			);
 		});
 
 		it('uses the admin credential before per-user credentials', async () => {
