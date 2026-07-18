@@ -5,6 +5,7 @@ import {
 	N8nButton,
 	N8nHeading,
 	N8nIcon,
+	N8nInput,
 	N8nLink,
 	N8nOption,
 	N8nSelect,
@@ -117,6 +118,23 @@ let creatingModelCredential = false;
 
 function handleModelCredentialChange(value: string | number | boolean | null) {
 	store.setField('modelCredentialId', value ? String(value) : null);
+	// A stored model only makes sense alongside a credential; clear it together.
+	if (!value) store.setField('modelName', null);
+	void store.save();
+}
+
+const modelNameValue = computed(() => {
+	if (store.draft.modelName !== undefined) return store.draft.modelName ?? '';
+	return store.settings?.modelName ?? '';
+});
+
+function handleModelNameInput(value: string) {
+	store.setField('modelName', value);
+}
+
+function handleModelNameCommit() {
+	if (store.draft.modelName === undefined) return;
+	store.setField('modelName', modelNameValue.value.trim() || null);
 	void store.save();
 }
 
@@ -284,6 +302,27 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 								</template>
 							</N8nActionDropdown>
 						</div>
+					</div>
+					<div v-if="selectedModelCredentialId" :class="$style.settingsRow">
+						<div :class="$style.settingsRowLeft">
+							<span :class="$style.settingsRowLabel">
+								{{ i18n.baseText('settings.n8nAgent.modelName.label') }}
+							</span>
+							<span :class="$style.settingsRowDescription">
+								{{ i18n.baseText('settings.n8nAgent.modelName.description') }}
+							</span>
+						</div>
+						<N8nInput
+							:class="$style.modelNameInput"
+							:model-value="modelNameValue"
+							size="small"
+							:disabled="store.isSaving"
+							:placeholder="i18n.baseText('settings.n8nAgent.modelName.placeholder')"
+							data-test-id="n8n-agent-model-name-input"
+							@update:model-value="handleModelNameInput"
+							@blur="handleModelNameCommit"
+							@keyup.enter="handleModelNameCommit"
+						/>
 					</div>
 				</div>
 
@@ -546,6 +585,12 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 .modelCredentialSelect {
 	width: 240px;
 	max-width: 100%;
+}
+
+.modelNameInput {
+	width: 240px;
+	max-width: 100%;
+	flex-shrink: 0;
 }
 
 .manageInstanceCredentialsLink {

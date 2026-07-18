@@ -99,6 +99,7 @@ interface PersistedAdminSettings {
 	n8nSandboxCredentialId?: string | null;
 	searchCredentialId?: string | null;
 	modelCredentialId?: string | null;
+	modelName?: string | null;
 	localGatewayDisabled?: boolean;
 	browserUseEnabled?: boolean;
 }
@@ -126,6 +127,8 @@ export class InstanceAiSettingsService {
 	private adminSearchCredentialId: string | null = null;
 
 	private adminModelCredentialId: string | null = null;
+
+	private adminModelName: string | null = null;
 
 	constructor(
 		globalConfig: GlobalConfig,
@@ -198,6 +201,7 @@ export class InstanceAiSettingsService {
 			n8nSandboxCredentialId: this.adminN8nSandboxCredentialId,
 			searchCredentialId: this.adminSearchCredentialId,
 			modelCredentialId: this.adminModelCredentialId,
+			modelName: this.adminModelName,
 			localGatewayDisabled: this.isLocalGatewayDisabled(),
 			browserUseEnabled: this.isBrowserUseEnabled(),
 		};
@@ -212,7 +216,7 @@ export class InstanceAiSettingsService {
 			this.deploymentLabel(),
 		);
 		if (this.isCloud || this.aiService.isProxyEnabled()) {
-			this.rejectManagedFields(update, ['modelCredentialId'], this.deploymentLabel());
+			this.rejectManagedFields(update, ['modelCredentialId', 'modelName'], this.deploymentLabel());
 		}
 		const { previous, next } = await this.dbLockService.withLock(
 			DbLock.INSTANCE_CREDENTIAL_SETTINGS,
@@ -222,9 +226,17 @@ export class InstanceAiSettingsService {
 					await this.readPersistedAdminSettings(transactionManager),
 				);
 				this.validateAdminSettingsUpdate(update, current);
-				if (update.modelCredentialId !== undefined && update.modelCredentialId !== null) {
-					const resolved = await this.resolveModelCredential(update.modelCredentialId);
-					this.ensureCredentialMatchesConfiguredModel(resolved.type);
+				if (update.modelCredentialId !== undefined || update.modelName !== undefined) {
+					const nextCredentialId =
+						update.modelCredentialId !== undefined
+							? update.modelCredentialId
+							: current.modelCredentialId;
+					const nextModelName =
+						update.modelName !== undefined ? update.modelName : current.modelName;
+					if (nextCredentialId) {
+						const resolved = await this.resolveModelCredential(nextCredentialId);
+						if (!nextModelName) this.ensureCredentialMatchesConfiguredModel(resolved.type);
+					}
 				}
 
 				const previous = this.snapshotAdminSettings();
@@ -516,19 +528,18 @@ export class InstanceAiSettingsService {
 	/** Resolve just the model name (e.g. 'claude-sonnet-4-20250514') for proxy routing. */
 	resolveModelName(user: User): string {
 		const prefs = this.readUserPreferences(user);
-		return prefs.modelName ?? this.extractModelName(this.config.model);
+		return this.adminModelName ?? prefs.modelName ?? this.extractModelName(this.config.model);
 	}
 
 	async resolveModelConfig(user: User): Promise<ModelConfig> {
-		const prefs = this.readUserPreferences(user);
-		const modelName = prefs.modelName ?? this.extractModelName(this.config.model);
+		const modelName = this.resolveModelName(user);
 
 		const adminModelConfig = await this.resolveAdminModelConfig(modelName);
 		if (adminModelConfig) {
 			return adminModelConfig;
 		}
 
-		const credentialId = prefs.credentialId ?? null;
+		const credentialId = this.readUserPreferences(user).credentialId ?? null;
 
 		if (!credentialId) {
 			return this.envVarModelConfig();
@@ -571,7 +582,7 @@ export class InstanceAiSettingsService {
 		const credentialProvider = CREDENTIAL_TO_MODEL_PROVIDER[credentialType];
 		if (credentialProvider !== configuredProvider) {
 			throw new UnprocessableRequestError(
-				`This credential is for "${credentialProvider}" but the configured model "${this.config.model}" requires a "${configuredProvider}" credential. Select a matching credential or set N8N_INSTANCE_AI_MODEL to a "${credentialProvider}" model.`,
+				`This credential is for "${credentialProvider}" but the configured model "${this.config.model}" requires a "${configuredProvider}" credential. Select a "${credentialProvider}" model alongside the credential, or set N8N_INSTANCE_AI_MODEL to a "${credentialProvider}" model.`,
 			);
 		}
 	}
@@ -752,6 +763,7 @@ export class InstanceAiSettingsService {
 			this.adminSearchCredentialId = persisted.searchCredentialId;
 		if (persisted.modelCredentialId !== undefined)
 			this.adminModelCredentialId = persisted.modelCredentialId;
+		if (persisted.modelName !== undefined) this.adminModelName = persisted.modelName;
 		if (persisted.localGatewayDisabled !== undefined)
 			c.localGatewayDisabled = persisted.localGatewayDisabled;
 		if (persisted.browserUseEnabled !== undefined)
@@ -777,6 +789,7 @@ export class InstanceAiSettingsService {
 			n8nSandboxCredentialId: this.adminN8nSandboxCredentialId,
 			searchCredentialId: this.adminSearchCredentialId,
 			modelCredentialId: this.adminModelCredentialId,
+			modelName: this.adminModelName,
 			localGatewayDisabled: c.localGatewayDisabled,
 			browserUseEnabled: c.browserUseEnabled,
 		};

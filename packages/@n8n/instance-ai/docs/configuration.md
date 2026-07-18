@@ -137,9 +137,12 @@ workflow canvas. Instance AI resolves them server-side through the
 | `instance-ai:search` | `braveSearchApi`, `searXngApi` | `searchCredentialId` |
 
 The environment variables above remain the fallback when no credential is selected.
-A credential referenced by one of these settings cannot be deleted until the
-reference is cleared. On cloud and proxy-managed deployments these settings are
-managed externally and the API rejects them.
+Alongside the model credential, admins can also select the model itself (`modelName`
+in the admin settings); the effective model name resolves as admin setting, then
+per-user preference, then `N8N_INSTANCE_AI_MODEL`. A credential referenced by one of
+these settings cannot be deleted until the reference is cleared. On cloud and
+proxy-managed deployments these settings are managed externally and the API rejects
+them.
 
 To integrate another instance-level feature with the broker, see
 [instance credentials](../../../cli/src/credentials/instance-credentials.md).
