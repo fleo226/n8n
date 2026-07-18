@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, computed, watch } from 'vue';
+import { onMounted, computed, nextTick, ref, watch } from 'vue';
 import {
 	N8nActionDropdown,
 	N8nButton,
@@ -116,24 +116,36 @@ const createModelCredentialItems = computed<Array<ActionDropdownItem<string>>>((
 
 let creatingModelCredential = false;
 
-function handleModelCredentialChange(value: string | number | boolean | null) {
-	store.setField('modelCredentialId', value ? String(value) : null);
-	// A stored model only makes sense alongside a credential; clear it together.
-	if (!value) store.setField('modelName', null);
-	void store.save();
-}
+const modelNameInputRef = ref<InstanceType<typeof N8nInput>>();
 
 const modelNameValue = computed(() => {
 	if (store.draft.modelName !== undefined) return store.draft.modelName ?? '';
 	return store.settings?.modelName ?? '';
 });
 
+function handleModelCredentialChange(value: string | number | boolean | null) {
+	store.setField('modelCredentialId', value ? String(value) : null);
+	if (!value) {
+		// A stored model only makes sense alongside a credential; clear it together.
+		store.setField('modelName', null);
+		void store.save();
+		return;
+	}
+	if (modelNameValue.value.trim()) {
+		void store.save();
+		return;
+	}
+	// No model yet: stage the selection and commit both fields from the model
+	// input, so validation sees the credential and model as one save.
+	void nextTick(() => modelNameInputRef.value?.focus());
+}
+
 function handleModelNameInput(value: string) {
 	store.setField('modelName', value);
 }
 
 function handleModelNameCommit() {
-	if (store.draft.modelName === undefined) return;
+	if (store.draft.modelName === undefined && store.draft.modelCredentialId === undefined) return;
 	store.setField('modelName', modelNameValue.value.trim() || null);
 	void store.save();
 }
@@ -161,10 +173,7 @@ watch(
 		if (creatingModelCredential) {
 			creatingModelCredential = false;
 			const newCred = store.instanceModelCredentials.find((c) => !previousIds.has(c.id));
-			if (newCred) {
-				store.setField('modelCredentialId', newCred.id);
-				void store.save();
-			}
+			if (newCred) handleModelCredentialChange(newCred.id);
 		}
 	},
 );
@@ -313,6 +322,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 							</span>
 						</div>
 						<N8nInput
+							ref="modelNameInputRef"
 							:class="$style.modelNameInput"
 							:model-value="modelNameValue"
 							size="small"

@@ -238,8 +238,8 @@ export const useInstanceAiSettingsStore = defineStore('instanceAiSettings', () =
 					syncInstanceAiFlagIntoGlobalModuleSettings(adminSaved);
 				}
 			}
-		} catch {
-			toast.showError(new Error('Failed to save settings'), 'Settings error');
+		} catch (error) {
+			toast.showError(error, 'Settings error');
 		} finally {
 			isSaving.value = false;
 		}
