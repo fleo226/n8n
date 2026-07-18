@@ -262,13 +262,40 @@ describe('InstanceAiSettingsService', () => {
 				new UnprocessableRequestError('Invalid instance credential'),
 			);
 
-			await expect(service.updateAdminSettings({ modelCredentialId: 'cred-1' })).rejects.toThrow(
-				'Invalid instance credential',
-			);
+			await expect(
+				service.updateAdminSettings({ modelCredentialId: 'cred-1', modelName: 'gpt-4' }),
+			).rejects.toThrow('Invalid instance credential');
 			expect(instanceCredentialBroker.resolveForConsumer).toHaveBeenCalledWith(
 				'instance-ai:model',
 				'cred-1',
 			);
+		});
+
+		it('requires the model name when changing credentials', async () => {
+			await expect(service.updateAdminSettings({ modelCredentialId: 'cred-1' })).rejects.toThrow(
+				'modelName must be provided when changing modelCredentialId',
+			);
+			expect(instanceCredentialBroker.resolveForConsumer).not.toHaveBeenCalled();
+		});
+
+		it('rejects a model name without an admin credential', async () => {
+			await expect(service.updateAdminSettings({ modelName: 'gpt-4' })).rejects.toThrow(
+				'modelName requires modelCredentialId',
+			);
+		});
+
+		it('clears the model name when clearing the credential', async () => {
+			settingsRepository.findByKey.mockResolvedValue({
+				key: 'instanceAi.settings',
+				value: JSON.stringify({ modelCredentialId: 'cred-1', modelName: 'gpt-4' }),
+				loadOnStartup: true,
+			} as never);
+
+			const result = await service.updateAdminSettings({ modelCredentialId: null });
+
+			expect(result).toMatchObject({ modelCredentialId: null, modelName: null });
+			const persisted = JSON.parse(settingsRepository.upsert.mock.calls[0][0].value);
+			expect(persisted).toMatchObject({ modelCredentialId: null, modelName: null });
 		});
 
 		it('uses the admin credential before per-user credentials', async () => {
@@ -285,7 +312,10 @@ describe('InstanceAiSettingsService', () => {
 				data: { apiKey: 'admin-key' },
 			});
 
-			await service.updateAdminSettings({ modelCredentialId: credential.id });
+			await service.updateAdminSettings({
+				modelCredentialId: credential.id,
+				modelName: 'gpt-4.1',
+			});
 			const result = await service.resolveModelConfig(
 				mock<User>({
 					settings: {
@@ -330,13 +360,35 @@ describe('InstanceAiSettingsService', () => {
 				type: credential.type,
 				data: { apiKey: 'admin-key' },
 			});
-			await service.updateAdminSettings({ modelCredentialId: credential.id });
+			await service.updateAdminSettings({
+				modelCredentialId: credential.id,
+				modelName: 'gpt-4',
+			});
 			vi.clearAllMocks();
 			globalConfig.deployment.type = 'cloud';
 
 			await expect(service.resolveModelConfig(mock<User>())).resolves.toBe('openai/gpt-4');
 			expect(instanceCredentialBroker.resolveForConsumer).not.toHaveBeenCalled();
 			await expect(service.listInstanceModelCredentials()).resolves.toEqual([]);
+		});
+
+		it('ignores a persisted admin model when the proxy is enabled', async () => {
+			const logger = mock<Logger>();
+			logger.scoped.mockReturnValue(logger);
+			Container.set(Logger, logger);
+			settingsRepository.findByKey.mockResolvedValue({
+				key: 'instanceAi.settings',
+				value: JSON.stringify({ modelCredentialId: 'cred-1', modelName: 'admin-model' }),
+				loadOnStartup: true,
+			} as never);
+			await service.loadFromDb();
+			aiService.isProxyEnabled.mockReturnValue(true);
+
+			expect(
+				service.resolveModelName(
+					mock<User>({ settings: { instanceAi: { modelName: 'user-model' } } }),
+				),
+			).toBe('user-model');
 		});
 	});
 

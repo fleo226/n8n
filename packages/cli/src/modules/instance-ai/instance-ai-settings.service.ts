@@ -225,22 +225,38 @@ export class InstanceAiSettingsService {
 					this.snapshotAdminSettings(),
 					await this.readPersistedAdminSettings(transactionManager),
 				);
-				this.validateAdminSettingsUpdate(update, current);
-				if (update.modelCredentialId !== undefined || update.modelName !== undefined) {
-					const nextCredentialId =
-						update.modelCredentialId !== undefined
-							? update.modelCredentialId
-							: current.modelCredentialId;
-					const nextModelName =
-						update.modelName !== undefined ? update.modelName : current.modelName;
-					if (nextCredentialId) {
-						const resolved = await this.resolveModelCredential(nextCredentialId);
-						if (!nextModelName) this.ensureCredentialMatchesConfiguredModel(resolved.type);
-					}
-				}
-
+				const nextUpdate =
+					update.modelCredentialId === null && update.modelName === undefined
+						? { ...update, modelName: null }
+						: update;
 				const previous = this.snapshotAdminSettings();
-				const next = this.mergeAdminSettings(current, update);
+				const next = this.mergeAdminSettings(current, nextUpdate);
+				this.validateAdminSettingsUpdate(nextUpdate, current);
+
+				const modelCredentialChanged =
+					nextUpdate.modelCredentialId !== undefined &&
+					nextUpdate.modelCredentialId !== current.modelCredentialId;
+				if (
+					modelCredentialChanged &&
+					next.modelCredentialId &&
+					nextUpdate.modelName === undefined
+				) {
+					throw new UnprocessableRequestError(
+						'modelName must be provided when changing modelCredentialId',
+					);
+				}
+				if (nextUpdate.modelName && !next.modelCredentialId) {
+					throw new UnprocessableRequestError('modelName requires modelCredentialId');
+				}
+				if (!next.modelCredentialId) next.modelName = null;
+
+				if (
+					next.modelCredentialId &&
+					(modelCredentialChanged || nextUpdate.modelName !== undefined)
+				) {
+					const resolved = await this.resolveModelCredential(next.modelCredentialId);
+					if (!next.modelName) this.ensureCredentialMatchesConfiguredModel(resolved.type);
+				}
 				await this.persistAdminSettings(next, transactionManager);
 				return { previous, next };
 			},
@@ -528,7 +544,9 @@ export class InstanceAiSettingsService {
 	/** Resolve just the model name (e.g. 'claude-sonnet-4-20250514') for proxy routing. */
 	resolveModelName(user: User): string {
 		const prefs = this.readUserPreferences(user);
-		return this.adminModelName ?? prefs.modelName ?? this.extractModelName(this.config.model);
+		const adminModelName =
+			this.isCloud || this.aiService.isProxyEnabled() ? null : this.adminModelName;
+		return adminModelName ?? prefs.modelName ?? this.extractModelName(this.config.model);
 	}
 
 	async resolveModelConfig(user: User): Promise<ModelConfig> {
@@ -625,11 +643,9 @@ export class InstanceAiSettingsService {
 	// ── Private helpers ───────────────────────────────────────────────────
 
 	/**
-	 * Admin fields sourced from environment variables only — never settable via
-	 * the API on any deployment. The settings UI exposes only the enable toggle
-	 * and permissions; model, search, sandbox and advanced options come from env.
-	 * Cloud and the AI service proxy already managed these externally; self-hosted
-	 * now follows suit for the initial launch.
+	 * Admin fields sourced from environment variables only. Model credential and
+	 * model name are intentionally excluded: direct self-hosted deployments may
+	 * update them, while cloud and proxy deployments reject them separately.
 	 */
 	private static readonly MANAGED_ADMIN_FIELDS: readonly string[] = [
 		'mcpServers',

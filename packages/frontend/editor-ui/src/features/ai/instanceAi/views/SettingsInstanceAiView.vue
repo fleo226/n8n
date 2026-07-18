@@ -124,19 +124,34 @@ const modelNameValue = computed(() => {
 });
 
 function handleModelCredentialChange(value: string | number | boolean | null) {
-	store.setField('modelCredentialId', value ? String(value) : null);
-	if (!value) {
+	const previousCredentialId = selectedModelCredentialId.value;
+	const nextCredentialId = value ? String(value) : null;
+	store.setField('modelCredentialId', nextCredentialId);
+	if (!nextCredentialId) {
 		// A stored model only makes sense alongside a credential; clear it together.
 		store.setField('modelName', null);
 		void store.save();
 		return;
 	}
-	if (modelNameValue.value.trim()) {
+
+	const previousType = store.instanceModelCredentials.find(
+		(credential) => credential.id === previousCredentialId,
+	)?.type;
+	const nextType = store.instanceModelCredentials.find(
+		(credential) => credential.id === nextCredentialId,
+	)?.type;
+	const modelName = modelNameValue.value.trim();
+	if (
+		modelName &&
+		(previousCredentialId === nextCredentialId ||
+			(previousType !== undefined && previousType === nextType))
+	) {
+		store.setField('modelName', modelName);
 		void store.save();
 		return;
 	}
-	// No model yet: stage the selection and commit both fields from the model
-	// input, so validation sees the credential and model as one save.
+
+	store.setField('modelName', null);
 	void nextTick(() => modelNameInputRef.value?.focus());
 }
 

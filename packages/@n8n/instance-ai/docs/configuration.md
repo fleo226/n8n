@@ -2,7 +2,8 @@
 
 ## Environment Variables
 
-All Instance AI configuration is done via environment variables.
+Environment variables define Instance AI defaults and fallbacks. On direct self-hosted
+deployments, admins can override the model credential and model name in Instance AI settings.
 
 ### Core
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref } from 'vue';
-import { fireEvent } from '@testing-library/vue';
+import { nextTick, ref } from 'vue';
+import { fireEvent, waitFor } from '@testing-library/vue';
 import { createTestingPinia } from '@pinia/testing';
 import { setActivePinia } from 'pinia';
 import { createComponentRenderer } from '@/__tests__/render';
@@ -39,6 +39,7 @@ vi.mock('../instanceAi.settings.api', () => ({
 	updatePreferences: vi.fn(),
 	fetchModelCredentials: vi.fn().mockResolvedValue([]),
 	fetchServiceCredentials: vi.fn().mockResolvedValue([]),
+	fetchInstanceModelCredentials: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../instanceAi.api', () => ({
@@ -129,16 +130,51 @@ describe('SettingsInstanceAiView', () => {
 				daytonaCredentialId: null,
 				n8nSandboxCredentialId: null,
 				searchCredentialId: null,
+				modelCredentialId: null,
+				modelName: null,
 				localGatewayDisabled: false,
 			},
 		});
 	});
 
+	describe('Model credential settings', () => {
+		it('clears the old model when switching credential providers', async () => {
+			const { getByTestId, getByText } = renderComponent();
+			await waitFor(() => expect(store.isLoading).toBe(false));
+			store.$patch({
+				settings: {
+					...store.settings!,
+					modelCredentialId: 'openai-id',
+					modelName: 'gpt-4o',
+				},
+				instanceModelCredentials: [
+					{ id: 'openai-id', name: 'OpenAI', type: 'openAiApi', provider: 'openai' },
+					{
+						id: 'anthropic-id',
+						name: 'Anthropic',
+						type: 'anthropicApi',
+						provider: 'anthropic',
+					},
+				],
+			});
+			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			await nextTick();
+
+			const select = getByTestId('n8n-agent-model-credential-select');
+			await fireEvent.click(select.querySelector('input')!);
+			await fireEvent.click(getByText('Anthropic (anthropic)'));
+
+			expect(store.draft).toMatchObject({
+				modelCredentialId: 'anthropic-id',
+				modelName: null,
+			});
+			expect(save).toHaveBeenCalledOnce();
+		});
+	});
+
 	describe('env-only config', () => {
-		// Model, search, sandbox and advanced options are configured via environment
-		// variables only; the settings page exposes just the enable toggle and permissions.
+		// Search, sandbox and advanced options remain environment-managed.
 		it.each([
-			['model', 'instanceAi.settings.section.model'],
 			['search', 'instanceAi.settings.section.search'],
 			['sandbox', 'instanceAi.settings.section.sandbox'],
 			['advanced', 'instanceAi.settings.section.advanced'],
