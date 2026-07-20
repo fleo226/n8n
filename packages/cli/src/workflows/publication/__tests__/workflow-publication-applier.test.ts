@@ -102,7 +102,8 @@ describe('WorkflowPublicationApplier', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		workflowRepository.findOneBy.mockResolvedValue(makeWorkflow({ activeVersionId: 'v-1' }));
+		// The publication target is the workflow's `activeVersionId`, not the record.
+		workflowRepository.findOneBy.mockResolvedValue(makeWorkflow({ activeVersionId: 'v-2' }));
 		workflowPublishedVersionRepository.findOne.mockResolvedValue(makePublishedVersion(oldVersion));
 		workflowPublishedVersionRepository.setPublishedVersion.mockResolvedValue(undefined);
 		workflowHistoryRepository.findOneBy.mockResolvedValue(newVersion);
@@ -192,6 +193,8 @@ describe('WorkflowPublicationApplier', () => {
 				'wf-1',
 			);
 			expect(workflowPublishedVersionRepository.setPublishedVersion).not.toHaveBeenCalled();
+			// An unpublished workflow has no active version, so no history row is looked up.
+			expect(workflowHistoryRepository.findOneBy).not.toHaveBeenCalled();
 		});
 
 		test('propagates a teardown failure and leaves the mapping in place', async () => {
@@ -206,7 +209,8 @@ describe('WorkflowPublicationApplier', () => {
 		});
 	});
 
-	test('returns version-missing when the published version history row is gone', async () => {
+	test('returns version-missing when the active version history row is gone', async () => {
+		// The workflow's `activeVersionId` points at a history row that no longer exists.
 		workflowHistoryRepository.findOneBy.mockResolvedValue(null);
 
 		const result = await applier.apply(makeRecord());
@@ -214,6 +218,23 @@ describe('WorkflowPublicationApplier', () => {
 		expect(result).toEqual({ type: 'version-missing' });
 		expect(workflowTriggerActivator.getEnabledTriggerNodes).not.toHaveBeenCalled();
 		expect(workflowPublishedVersionRepository.setPublishedVersion).not.toHaveBeenCalled();
+	});
+
+	test("publishes the workflow's current active version, ignoring the version the record was enqueued with", async () => {
+		// The record only marks the workflow as needing reconciliation; the target
+		// is always the workflow's `activeVersionId` at apply time, so a record
+		// enqueued for a since-superseded version still applies the current one.
+		const result = await applier.apply(makeRecord({ publishedVersionId: 'v-stale' }));
+
+		expect(result).toEqual({ type: 'completed', appliedVersionId: 'v-2', triggerStatuses: [] });
+		expect(workflowPublishedVersionRepository.setPublishedVersion).toHaveBeenCalledWith(
+			'wf-1',
+			'v-2',
+		);
+		expect(workflowHistoryRepository.findOneBy).toHaveBeenCalledWith({ versionId: 'v-2' });
+		expect(workflowHistoryRepository.findOneBy).not.toHaveBeenCalledWith({
+			versionId: 'v-stale',
+		});
 	});
 
 	test('advances the published version and completes when no triggers changed', async () => {
@@ -224,6 +245,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -259,6 +281,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'hook', nodeName: 'hook', status: 'activated', triggerKind: 'persisted' },
 				{ nodeId: 'poll', nodeName: 'poll', status: 'activated', triggerKind: 'in-memory' },
@@ -273,6 +296,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 				{ nodeId: 'b', nodeName: 'b', status: 'activated', triggerKind: 'in-memory' },
@@ -303,6 +327,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -328,6 +353,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -352,6 +378,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -377,6 +404,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 				{ nodeId: 'b', nodeName: 'b', status: 'activated', triggerKind: 'in-memory' },
@@ -396,6 +424,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -440,6 +469,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
@@ -482,6 +512,7 @@ describe('WorkflowPublicationApplier', () => {
 		expect(result).toEqual({
 			type: 'failed',
 			error: expect.objectContaining({ message: 'registration failed' }),
+			appliedVersionId: 'v-2',
 		});
 		expect(workflowPublishedVersionRepository.setPublishedVersion).toHaveBeenCalledWith(
 			'wf-1',
@@ -501,6 +532,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'partial',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 				{
@@ -532,6 +564,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'partial',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 				{
@@ -563,6 +596,7 @@ describe('WorkflowPublicationApplier', () => {
 		expect(result).toEqual({
 			type: 'failed',
 			error,
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{
 					nodeId: 'b',
@@ -597,6 +631,7 @@ describe('WorkflowPublicationApplier', () => {
 			error: expect.objectContaining({
 				message: `Triggers failed to activate: "b": ${deterministic.message}; "c": third-party unavailable`,
 			}),
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{
 					nodeId: 'b',
@@ -630,6 +665,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'partial',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 				{
@@ -655,6 +691,7 @@ describe('WorkflowPublicationApplier', () => {
 
 		expect(result).toEqual({
 			type: 'completed',
+			appliedVersionId: 'v-2',
 			triggerStatuses: [
 				{ nodeId: 'a', nodeName: 'a', status: 'activated', triggerKind: 'in-memory' },
 			],
