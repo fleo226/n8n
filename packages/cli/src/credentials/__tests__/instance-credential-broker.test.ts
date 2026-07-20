@@ -11,11 +11,13 @@ import { mock } from 'vitest-mock-extended';
 
 import type { CredentialsService } from '../credentials.service';
 import { InstanceCredentialBroker } from '../instance-credential-broker';
-import { InstanceCredentialUseRegistry } from '../instance-credential-use.registry';
 
 describe('InstanceCredentialBroker', () => {
-	const credentialUseId = 'example:primary';
-	const useRegistry = new InstanceCredentialUseRegistry();
+	const credentialUse = {
+		id: 'example:primary',
+		credentialTypes: ['openAiApi'],
+	} as const;
+	const credentialUseId = credentialUse.id;
 	const logger = mock<Logger>();
 	const entityManager = mock<EntityManager>();
 	const credentialsRepository = mock<CredentialsRepository>({ manager: entityManager });
@@ -25,27 +27,13 @@ describe('InstanceCredentialBroker', () => {
 	const credentialsService = mock<CredentialsService>();
 	const broker = new InstanceCredentialBroker(
 		logger,
-		useRegistry,
 		credentialsRepository,
 		assignmentRepository,
 		credentialsService,
 	);
 
-	beforeAll(() => {
-		broker.registerUse({
-			id: credentialUseId,
-			credentialTypes: ['openAiApi'],
-		});
-	});
-
 	beforeEach(() => {
 		vi.resetAllMocks();
-	});
-
-	it('rejects unknown credential uses', async () => {
-		await expect(broker.listForUse('unknown')).rejects.toThrow(
-			'Unknown instance credential use "unknown"',
-		);
 	});
 
 	it('lists only credentials allowed for the credential use', async () => {
@@ -57,7 +45,7 @@ describe('InstanceCredentialBroker', () => {
 		});
 		credentialsRepository.find.mockResolvedValue([credential]);
 
-		await expect(broker.listForUse(credentialUseId)).resolves.toEqual([credential]);
+		await expect(broker.listForUse(credentialUse)).resolves.toEqual([credential]);
 		expect(credentialsRepository.find).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({ availability: 'instance' }),
@@ -68,7 +56,7 @@ describe('InstanceCredentialBroker', () => {
 	it('rejects assignments outside the credential use policy', async () => {
 		entityManager.findOne.mockResolvedValue(null);
 
-		await expect(broker.assignForUse(credentialUseId, 'workflow-credential')).rejects.toThrow(
+		await expect(broker.assignForUse(credentialUse, 'workflow-credential')).rejects.toThrow(
 			'not valid for instance credential use',
 		);
 		expect(credentialsService.decrypt).not.toHaveBeenCalled();
@@ -83,7 +71,7 @@ describe('InstanceCredentialBroker', () => {
 		});
 		entityManager.findOne.mockResolvedValue(credential);
 
-		await expect(broker.assignForUse(credentialUseId, credential.id)).resolves.toEqual({
+		await expect(broker.assignForUse(credentialUse, credential.id)).resolves.toEqual({
 			id: credential.id,
 			name: credential.name,
 			type: credential.type,
@@ -94,7 +82,7 @@ describe('InstanceCredentialBroker', () => {
 			['credentialUseId'],
 		);
 
-		await broker.clearForUse(credentialUseId);
+		await broker.clearForUse(credentialUse);
 		expect(entityManager.delete).toHaveBeenCalledWith(InstanceCredentialAssignment, {
 			credentialUseId,
 		});
@@ -107,20 +95,37 @@ describe('InstanceCredentialBroker', () => {
 			type: 'openAiApi',
 			availability: 'instance',
 		});
-		entityManager.findOne.mockResolvedValue(credential);
+		entityManager.findOne.mockResolvedValueOnce(credential).mockResolvedValueOnce(null);
 		entityManager.upsert.mockRejectedValue(
 			new QueryFailedError('INSERT', [], new Error('FOREIGN KEY constraint failed')),
 		);
 
-		await expect(broker.assignForUse(credentialUseId, credential.id)).rejects.toThrow(
+		await expect(broker.assignForUse(credentialUse, credential.id)).rejects.toThrow(
 			'not valid for instance credential use',
+		);
+	});
+
+	it('rethrows transient DB failures instead of blaming the credential', async () => {
+		const credential = mock<CredentialsEntity>({
+			id: 'credential-id',
+			name: 'Primary model',
+			type: 'openAiApi',
+			availability: 'instance',
+		});
+		entityManager.findOne.mockResolvedValue(credential);
+		entityManager.upsert.mockRejectedValue(
+			new QueryFailedError('INSERT', [], new Error('deadlock detected')),
+		);
+
+		await expect(broker.assignForUse(credentialUse, credential.id)).rejects.toThrow(
+			'deadlock detected',
 		);
 	});
 
 	it('returns no credential when the credential use has no assignment', async () => {
 		entityManager.findOneBy.mockResolvedValue(null);
 
-		await expect(broker.resolveForUse(credentialUseId)).resolves.toBeNull();
+		await expect(broker.resolveForUse(credentialUse)).resolves.toBeNull();
 		expect(credentialsService.decrypt).not.toHaveBeenCalled();
 	});
 
@@ -137,7 +142,7 @@ describe('InstanceCredentialBroker', () => {
 		entityManager.findOne.mockResolvedValue(credential);
 		credentialsService.decrypt.mockResolvedValue({ apiKey: 'secret' });
 
-		await expect(broker.resolveForUse(credentialUseId)).resolves.toEqual({
+		await expect(broker.resolveForUse(credentialUse)).resolves.toEqual({
 			id: credential.id,
 			name: credential.name,
 			type: credential.type,

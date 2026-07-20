@@ -24,6 +24,7 @@ import { CredentialsFinderService } from '@/credentials/credentials-finder.servi
 import { CredentialsService } from '@/credentials/credentials.service';
 import {
 	InstanceCredentialBroker,
+	type InstanceCredentialUse,
 	type ResolvedInstanceCredential,
 } from '@/credentials/instance-credential-broker';
 import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
@@ -187,16 +188,16 @@ export class InstanceAiSettingsService {
 			? [null, null, null, null]
 			: await Promise.all([
 					this.instanceCredentialBroker.getAssignedCredentialId(
-						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
+						INSTANCE_AI_MODEL_CREDENTIAL_POLICY,
 					),
 					this.instanceCredentialBroker.getAssignedCredentialId(
-						INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
+						INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY,
 					),
 					this.instanceCredentialBroker.getAssignedCredentialId(
-						INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
+						INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY,
 					),
 					this.instanceCredentialBroker.getAssignedCredentialId(
-						INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id,
+						INSTANCE_AI_SEARCH_CREDENTIAL_POLICY,
 					),
 				]);
 		const [modelCredentialId, daytonaCredentialId, n8nSandboxCredentialId, searchCredentialId] =
@@ -205,22 +206,20 @@ export class InstanceAiSettingsService {
 		return {
 			enabled: this.enabled,
 			permissions: { ...this.permissions },
-			mcpServers: c.mcpServers,
 			mcpAccessEnabled: this.mcpAccessEnabled,
 			sandboxEnabled: c.sandboxEnabled,
 			sandboxProvider,
-			sandboxImage: c.sandboxImage,
-			sandboxTimeout: c.sandboxTimeout,
 			daytonaCredentialId,
 			n8nSandboxCredentialId,
 			searchCredentialId,
 			modelCredentialId,
 			modelName: isManaged ? null : this.adminModelName,
 			modelEnvConfigured: Boolean(c.modelApiKey.trim() || c.modelUrl.trim()),
+			// n8n-sandbox needs only the URL; the service accepts keyless clients.
 			sandboxEnvConfigured:
 				sandboxProvider === 'daytona'
 					? Boolean(c.daytonaApiKey.trim())
-					: Boolean(c.n8nSandboxServiceUrl.trim() && c.n8nSandboxServiceApiKey.trim()),
+					: Boolean(c.n8nSandboxServiceUrl.trim()),
 			searchEnvConfigured: Boolean(c.braveSearchApiKey.trim() || c.searxngUrl.trim()),
 			localGatewayDisabled: this.isLocalGatewayDisabled(),
 			browserUseEnabled: this.isBrowserUseEnabled(),
@@ -259,12 +258,11 @@ export class InstanceAiSettingsService {
 				);
 				const currentModelCredentialId =
 					await this.instanceCredentialBroker.getAssignedCredentialId(
-						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
+						INSTANCE_AI_MODEL_CREDENTIAL_POLICY,
 						transactionManager,
 					);
 				const previous = this.snapshotAdminSettings();
 				const next = this.mergeAdminSettings(current, settingsUpdate);
-				this.validateAdminSettingsUpdate(settingsUpdate, current);
 
 				// The instance model credential and model name only work as a complete pair
 				const nextModelCredentialId =
@@ -290,30 +288,23 @@ export class InstanceAiSettingsService {
 				}
 				next.modelName = nextModelName ?? null;
 
-				if (modelCredentialId === null) {
-					await this.instanceCredentialBroker.clearForUse(
-						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
-						transactionManager,
-					);
-				} else if (modelCredentialId !== undefined) {
-					await this.instanceCredentialBroker.assignForUse(
-						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
-						modelCredentialId,
-						transactionManager,
-					);
-				}
 				await this.updateCredentialAssignment(
-					INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
+					INSTANCE_AI_MODEL_CREDENTIAL_POLICY,
+					modelCredentialId,
+					transactionManager,
+				);
+				await this.updateCredentialAssignment(
+					INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY,
 					daytonaCredentialId,
 					transactionManager,
 				);
 				await this.updateCredentialAssignment(
-					INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
+					INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY,
 					n8nSandboxCredentialId,
 					transactionManager,
 				);
 				await this.updateCredentialAssignment(
-					INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id,
+					INSTANCE_AI_SEARCH_CREDENTIAL_POLICY,
 					searchCredentialId,
 					transactionManager,
 				);
@@ -383,26 +374,10 @@ export class InstanceAiSettingsService {
 
 	// ── Shared accessors ──────────────────────────────────────────────────
 
-	/** List credentials the user can access that are usable as LLM providers. */
-	async listModelCredentials(user: User): Promise<InstanceAiModelCredential[]> {
-		if (this.aiService.isProxyEnabled()) return [];
-		const allCredentials = await this.credentialsFinderService.findCredentialsForUser(user, [
-			'credential:read',
-		]);
-		return allCredentials
-			.filter((c) => INSTANCE_AI_MODEL_CREDENTIAL_POLICY.credentialTypes.includes(c.type))
-			.map((c) => ({
-				id: c.id,
-				name: c.name,
-				type: c.type,
-				provider: CREDENTIAL_TO_MODEL_PROVIDER[c.type] ?? 'custom',
-			}));
-	}
-
 	async listInstanceModelCredentials(): Promise<InstanceAiModelCredential[]> {
 		if (this.isCloud || this.aiService.isProxyEnabled()) return [];
 		const instanceCredentials = await this.instanceCredentialBroker.listForUse(
-			INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
+			INSTANCE_AI_MODEL_CREDENTIAL_POLICY,
 		);
 		return instanceCredentials.map((c) => ({
 			id: c.id,
@@ -416,9 +391,9 @@ export class InstanceAiSettingsService {
 	async listInstanceServiceCredentials(): Promise<InstanceAiModelCredential[]> {
 		if (this.isCloud || this.aiService.isProxyEnabled()) return [];
 		const credentials = await Promise.all([
-			this.instanceCredentialBroker.listForUse(INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id),
-			this.instanceCredentialBroker.listForUse(INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id),
-			this.instanceCredentialBroker.listForUse(INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id),
+			this.instanceCredentialBroker.listForUse(INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY),
+			this.instanceCredentialBroker.listForUse(INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY),
+			this.instanceCredentialBroker.listForUse(INSTANCE_AI_SEARCH_CREDENTIAL_POLICY),
 		]);
 		return credentials.flat().map((c) => ({
 			id: c.id,
@@ -517,11 +492,11 @@ export class InstanceAiSettingsService {
 
 	/** Resolve a service's instance credential; null means fall back to environment configuration. */
 	private async resolveServiceCredential(
-		policy: { id: string },
+		policy: InstanceCredentialUse,
 		service: string,
 	): Promise<ResolvedInstanceCredential | null> {
 		if (this.isCloud || this.aiService.isProxyEnabled()) return null;
-		return await this.instanceCredentialBroker.resolveForUse(policy.id).catch((error: unknown) => {
+		return await this.instanceCredentialBroker.resolveForUse(policy).catch((error: unknown) => {
 			this.warnCredentialFallback(service, policy.id, ensureError(error).message);
 			return null;
 		});
@@ -704,16 +679,16 @@ export class InstanceAiSettingsService {
 	];
 
 	private async updateCredentialAssignment(
-		credentialUseId: string,
+		credentialUse: InstanceCredentialUse,
 		credentialId: string | null | undefined,
 		transactionManager: EntityManager,
 	): Promise<void> {
 		if (credentialId === undefined) return;
 		if (credentialId === null) {
-			await this.instanceCredentialBroker.clearForUse(credentialUseId, transactionManager);
+			await this.instanceCredentialBroker.clearForUse(credentialUse, transactionManager);
 		} else {
 			await this.instanceCredentialBroker.assignForUse(
-				credentialUseId,
+				credentialUse,
 				credentialId,
 				transactionManager,
 			);
@@ -738,32 +713,6 @@ export class InstanceAiSettingsService {
 			throw new UnprocessableRequestError(
 				`Cannot update ${label}-managed fields: ${present.join(', ')}`,
 			);
-		}
-	}
-
-	private validateAdminSettingsUpdate(
-		update: InstanceAiAdminSettingsUpdateRequest,
-		current: PersistedAdminSettings,
-	): void {
-		const touchesSandboxSettings =
-			update.sandboxEnabled !== undefined ||
-			update.sandboxProvider !== undefined ||
-			update.sandboxImage !== undefined ||
-			update.sandboxTimeout !== undefined;
-		if (!touchesSandboxSettings) {
-			return;
-		}
-
-		// `update.sandboxProvider` is already enum-validated by the request DTO; we only
-		// need the resolved provider here to enforce the cross-field service-URL rule,
-		// which spans the request body and env-backed config and can't live in the schema.
-		const sandboxProvider = normalizeSandboxProvider(
-			update.sandboxProvider ?? current.sandboxProvider,
-		);
-		const sandboxEnabled = update.sandboxEnabled ?? current.sandboxEnabled ?? false;
-		const unavailableReason = this.getSandboxUnavailableReason(sandboxEnabled, sandboxProvider);
-		if (unavailableReason) {
-			throw new UnprocessableRequestError(unavailableReason);
 		}
 	}
 

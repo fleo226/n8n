@@ -9,7 +9,7 @@ import ModelCredentialDialog from '../components/settings/ModelCredentialDialog.
 import { useInstanceAiSettingsStore } from '../instanceAiSettings.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
-import { fetchInstanceModelCredentials } from '../instanceAi.settings.api';
+import { fetchInstanceModelCredentials, fetchSettings } from '../instanceAi.settings.api';
 import type { FrontendModuleSettings } from '@n8n/api-types';
 import type { ICredentialType } from 'n8n-workflow';
 
@@ -41,7 +41,6 @@ vi.mock('../instanceAi.settings.api', () => ({
 		localGatewayDisabled: false,
 	}),
 	updatePreferences: vi.fn(),
-	fetchModelCredentials: vi.fn().mockResolvedValue([]),
 	fetchServiceCredentials: vi.fn().mockResolvedValue([]),
 	fetchInstanceModelCredentials: vi.fn().mockResolvedValue([]),
 }));
@@ -123,12 +122,9 @@ describe('SettingsInstanceAiView', () => {
 			settings: {
 				enabled: true,
 				permissions: {},
-				mcpServers: '',
 				mcpAccessEnabled: true,
 				sandboxEnabled: false,
 				sandboxProvider: 'n8n-sandbox',
-				sandboxImage: '',
-				sandboxTimeout: 60,
 				daytonaCredentialId: null,
 				n8nSandboxCredentialId: null,
 				searchCredentialId: null,
@@ -160,7 +156,7 @@ describe('SettingsInstanceAiView', () => {
 					},
 				],
 			});
-			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			const save = vi.spyOn(store, 'save').mockResolvedValue(true);
 			const { getByTestId, getByText } = renderModelDialog({ props: { open: true } });
 			await nextTick();
 
@@ -205,7 +201,10 @@ describe('SettingsInstanceAiView', () => {
 				store.$patch({
 					settings: { ...store.settings!, ...store.draft },
 				});
-				store.reset();
+				for (const key of Object.keys(store.draft)) {
+					delete (store.draft as Record<string, unknown>)[key];
+				}
+				return true;
 			});
 		});
 
@@ -278,6 +277,34 @@ describe('SettingsInstanceAiView', () => {
 			expect(await findByTestId('n8n-agent-sandbox-credential-select')).toBeVisible();
 			expect(queryByTestId('n8n-agent-sandbox-dialog-step')).toBeNull();
 			expect(queryByTestId('n8n-agent-sandbox-dialog-back')).toBeNull();
+		});
+
+		it('editing the configured model row never chains into the sandbox step', async () => {
+			// Model configured, sandbox still missing: the row opens a plain dialog and its
+			// save must not fall through into the sandbox step.
+			const configured = {
+				...store.settings!,
+				modelCredentialId: 'openai-id',
+				modelName: 'gpt-4o',
+			};
+			store.$patch({ settings: configured });
+			// onMounted fetch would otherwise reset settings; keep it configured.
+			vi.mocked(fetchSettings).mockResolvedValue(configured);
+			const { findByTestId, getByTestId, queryByTestId } = renderComponent();
+
+			await fireEvent.click(getByTestId('n8n-agent-model-row'));
+			const modelNameField = await findByTestId('n8n-agent-model-name-input');
+			expect(queryByTestId('n8n-agent-model-dialog-step')).toBeNull();
+
+			const modelNameInput =
+				modelNameField.tagName === 'INPUT'
+					? (modelNameField as HTMLInputElement)
+					: modelNameField.querySelector('input')!;
+			await fireEvent.update(modelNameInput, 'gpt-4o-mini');
+			await fireEvent.click(getByTestId('n8n-agent-model-dialog-save'));
+
+			await nextTick();
+			expect(queryByTestId('n8n-agent-sandbox-dialog-step')).toBeNull();
 		});
 	});
 
@@ -419,7 +446,7 @@ describe('SettingsInstanceAiView', () => {
 
 		it('persists a change to the MCP access toggle', async () => {
 			const setField = vi.spyOn(store, 'setField');
-			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			const save = vi.spyOn(store, 'save').mockResolvedValue(true);
 			const { getByTestId } = renderComponent();
 
 			await fireEvent.click(getByTestId('n8n-agent-mcp-access-toggle'));
@@ -483,7 +510,7 @@ describe('SettingsInstanceAiView', () => {
 
 		it('persists a permission change from an expanded group', async () => {
 			const setPermission = vi.spyOn(store, 'setPermission');
-			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			const save = vi.spyOn(store, 'save').mockResolvedValue(true);
 			const { getByTestId, getByLabelText, getAllByText } = renderComponent();
 
 			await fireEvent.click(getByLabelText('Toggle settings.n8nAgent.permissions.group.folders'));

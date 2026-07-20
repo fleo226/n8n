@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import {
 	N8nButton,
 	N8nDialog,
@@ -15,7 +15,7 @@ import { useI18n } from '@n8n/i18n';
 import { INSTANCE_SEARCH_CREDENTIAL_TYPES } from '../../constants';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import { useInstanceAiSettingsStore } from '../../instanceAiSettings.store';
-import { useInstanceCredentialEditor } from '../../composables/useInstanceCredentialEditor';
+import { useInstanceCredentialDialog } from '../../composables/useInstanceCredentialDialog';
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -28,22 +28,13 @@ const credentials = computed(() =>
 	store.serviceCredentials.filter((credential) => searchCredentialTypes.includes(credential.type)),
 );
 
-const credentialId = ref('');
-// Set while the credential modal is open on top, so reopening restores unsaved edits.
-let skipNextHydrate = false;
-
-watch(
+const { credentialId, openCreate, openEdit } = useInstanceCredentialDialog({
 	open,
-	(isOpen) => {
-		if (!isOpen) return;
-		if (skipNextHydrate) {
-			skipNextHydrate = false;
-			return;
-		}
-		credentialId.value = store.settings?.searchCredentialId ?? '';
-	},
-	{ immediate: true },
-);
+	current: () => store.settings?.searchCredentialId ?? '',
+	hydrate: () => {},
+	credentials: () => credentials.value,
+	refresh: async () => await store.refreshCredentials(),
+});
 
 function credentialTypeLabel(type: string) {
 	return credentialsStore.getCredentialTypeByName(type)?.displayName ?? type;
@@ -60,43 +51,18 @@ const createItems: Array<DropdownMenuItemProps<string>> = [
 	},
 ];
 
-const { createCredential, editCredential } = useInstanceCredentialEditor({
-	credentials: () => credentials.value,
-	refresh: async () => await store.refreshCredentials(),
-	onClosed: (created) => {
-		if (created) credentialId.value = created.id;
-		open.value = true;
-	},
-});
-
-function holdForCredentialModal() {
-	skipNextHydrate = true;
-	open.value = false;
-}
-
-function handleCreate(credentialType: string) {
-	holdForCredentialModal();
-	createCredential(credentialType);
-}
-
-function handleEdit() {
-	if (!credentialId.value) return;
-	holdForCredentialModal();
-	editCredential(credentialId.value);
-}
-
 const isChanged = computed(() => credentialId.value !== (store.settings?.searchCredentialId ?? ''));
 const canRemove = computed(() => Boolean(store.settings?.searchCredentialId));
 
 async function handleSave() {
 	store.setField('searchCredentialId', credentialId.value || null);
-	await store.save();
+	if (!(await store.save())) return;
 	open.value = false;
 }
 
 async function handleRemove() {
 	store.setField('searchCredentialId', null);
-	await store.save();
+	if (!(await store.save())) return;
 	open.value = false;
 }
 </script>
@@ -137,14 +103,14 @@ async function handleRemove() {
 						:label="i18n.baseText('settings.n8nAgent.credentials.edit')"
 						:disabled="store.isSaving"
 						data-test-id="n8n-agent-search-credential-edit"
-						@click="handleEdit"
+						@click="openEdit"
 					/>
 
 					<N8nDropdownMenu
 						:items="createItems"
 						placement="bottom-end"
 						data-test-id="n8n-agent-search-credential-create"
-						@select="handleCreate"
+						@select="openCreate"
 					>
 						<template #trigger>
 							<N8nButton variant="outline" size="medium" :disabled="store.isSaving">

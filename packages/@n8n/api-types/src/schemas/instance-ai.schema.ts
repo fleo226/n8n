@@ -1395,12 +1395,9 @@ export function isInstanceAiSandboxProvider(value: unknown): value is InstanceAi
 export interface InstanceAiAdminSettingsResponse {
 	enabled: boolean;
 	permissions: InstanceAiPermissions;
-	mcpServers: string;
 	mcpAccessEnabled: boolean;
 	sandboxEnabled: boolean;
 	sandboxProvider: InstanceAiSandboxProvider;
-	sandboxImage: string;
-	sandboxTimeout: number;
 	daytonaCredentialId: string | null;
 	n8nSandboxCredentialId: string | null;
 	searchCredentialId: string | null;

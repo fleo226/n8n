@@ -30,7 +30,7 @@ export function useInstanceCredentialEditor(options: {
 			undefined,
 			undefined,
 			undefined,
-			{ availability: 'instance', closeOnSave: true },
+			{ availability: 'instance', closeOnSave: true, hideAskAssistant: true },
 		);
 	}
 
@@ -40,8 +40,9 @@ export function useInstanceCredentialEditor(options: {
 		uiStore.openExistingCredential(credentialId, { hideAskAssistant: true });
 	}
 
+	// Not isModalActiveById: that is topmost-only, so a stacked modal would read as a close.
 	watch(
-		() => uiStore.isModalActiveById[CREDENTIAL_EDIT_MODAL_KEY],
+		() => uiStore.activeModals.includes(CREDENTIAL_EDIT_MODAL_KEY),
 		async (isOpen, wasOpen) => {
 			if (!wasOpen || isOpen || !tracking) return;
 			tracking = false;

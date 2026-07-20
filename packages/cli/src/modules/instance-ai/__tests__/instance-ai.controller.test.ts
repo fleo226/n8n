@@ -1038,15 +1038,6 @@ describe('InstanceAiController', () => {
 		});
 	});
 
-	describe('listModelCredentials', () => {
-		it('should require instanceAi:message scope', () => {
-			expect(scopeOf('listModelCredentials')).toEqual({
-				scope: 'instanceAi:message',
-				globalOnly: true,
-			});
-		});
-	});
-
 	describe('listServiceCredentials', () => {
 		it('should require instanceAi:manage scope', () => {
 			expect(scopeOf('listServiceCredentials')).toEqual({

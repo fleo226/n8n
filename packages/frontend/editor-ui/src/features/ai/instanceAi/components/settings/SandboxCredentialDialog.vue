@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import {
 	N8nButton,
 	N8nDialog,
@@ -14,7 +14,7 @@ import {
 } from '@n8n/design-system';
 import { useI18n } from '@n8n/i18n';
 import { useInstanceAiSettingsStore } from '../../instanceAiSettings.store';
-import { useInstanceCredentialEditor } from '../../composables/useInstanceCredentialEditor';
+import { useInstanceCredentialDialog } from '../../composables/useInstanceCredentialDialog';
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -41,47 +41,13 @@ const credentials = computed(() =>
 	store.serviceCredentials.filter((credential) => credential.type === credentialType.value),
 );
 
-const credentialId = ref('');
-// Set while the credential modal is open on top, so reopening restores unsaved edits.
-let skipNextHydrate = false;
-
-watch(
+const { credentialId, openCreate, openEdit } = useInstanceCredentialDialog({
 	open,
-	(isOpen) => {
-		if (!isOpen) return;
-		if (skipNextHydrate) {
-			skipNextHydrate = false;
-			return;
-		}
-		credentialId.value = store.settings?.[credentialField.value] ?? '';
-	},
-	{ immediate: true },
-);
-
-const { createCredential, editCredential } = useInstanceCredentialEditor({
+	current: () => store.settings?.[credentialField.value] ?? '',
+	hydrate: () => {},
 	credentials: () => credentials.value,
 	refresh: async () => await store.refreshCredentials(),
-	onClosed: (created) => {
-		if (created) credentialId.value = created.id;
-		open.value = true;
-	},
 });
-
-function holdForCredentialModal() {
-	skipNextHydrate = true;
-	open.value = false;
-}
-
-function handleCreate() {
-	holdForCredentialModal();
-	createCredential(credentialType.value);
-}
-
-function handleEdit() {
-	if (!credentialId.value) return;
-	holdForCredentialModal();
-	editCredential(credentialId.value);
-}
 
 const isChanged = computed(
 	() => credentialId.value !== (store.settings?.[credentialField.value] ?? ''),
@@ -89,7 +55,7 @@ const isChanged = computed(
 
 async function handleSave() {
 	store.setField(credentialField.value, credentialId.value || null);
-	await store.save();
+	if (!(await store.save())) return;
 	open.value = false;
 	emit('saved');
 }
@@ -163,7 +129,7 @@ const title = computed(() =>
 						:label="i18n.baseText('settings.n8nAgent.credentials.edit')"
 						:disabled="store.isSaving"
 						data-test-id="n8n-agent-sandbox-credential-edit"
-						@click="handleEdit"
+						@click="openEdit"
 					/>
 
 					<N8nButton
@@ -172,7 +138,7 @@ const title = computed(() =>
 						:label="i18n.baseText('settings.n8nAgent.modelCredential.createNew')"
 						:disabled="store.isSaving"
 						data-test-id="n8n-agent-sandbox-credential-create"
-						@click="handleCreate"
+						@click="openCreate(credentialType)"
 					/>
 				</div>
 			</N8nInputLabel>

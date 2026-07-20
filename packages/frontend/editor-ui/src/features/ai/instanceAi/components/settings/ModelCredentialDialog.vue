@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import {
 	N8nButton,
 	N8nDialog,
@@ -20,7 +20,7 @@ import { useI18n } from '@n8n/i18n';
 import { INSTANCE_MODEL_CREDENTIAL_TYPES } from '../../constants';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import { useInstanceAiSettingsStore } from '../../instanceAiSettings.store';
-import { useInstanceCredentialEditor } from '../../composables/useInstanceCredentialEditor';
+import { useInstanceCredentialDialog } from '../../composables/useInstanceCredentialDialog';
 
 const open = defineModel<boolean>('open', { required: true });
 
@@ -32,24 +32,18 @@ const i18n = useI18n();
 const store = useInstanceAiSettingsStore();
 const credentialsStore = useCredentialsStore();
 
-const credentialId = ref('');
 const modelName = ref('');
-// Set while the credential modal is open on top, so reopening restores unsaved edits.
-let skipNextHydrate = false;
 
-watch(
+const { credentialId, openCreate, openEdit } = useInstanceCredentialDialog({
 	open,
-	(isOpen) => {
-		if (!isOpen) return;
-		if (skipNextHydrate) {
-			skipNextHydrate = false;
-			return;
-		}
-		credentialId.value = store.settings?.modelCredentialId ?? '';
+	current: () => store.settings?.modelCredentialId ?? '',
+	hydrate: () => {
 		modelName.value = store.settings?.modelName ?? '';
 	},
-	{ immediate: true },
-);
+	credentials: () => store.instanceModelCredentials,
+	refresh: async () => await store.refreshInstanceModelCredentials(),
+	onCreated: (credential) => selectCredential(credential.id),
+});
 
 function credentialTypeLabel(type: string) {
 	return credentialsStore.getCredentialTypeByName(type)?.displayName ?? type;
@@ -62,36 +56,11 @@ const createItems = computed<Array<DropdownMenuItemProps<string>>>(() =>
 const credentialTypeById = (id: string) =>
 	store.instanceModelCredentials.find((credential) => credential.id === id)?.type;
 
-const { createCredential, editCredential } = useInstanceCredentialEditor({
-	credentials: () => store.instanceModelCredentials,
-	refresh: async () => await store.refreshInstanceModelCredentials(),
-	onClosed: (created) => {
-		if (created) selectCredential(created.id);
-		open.value = true;
-	},
-});
-
 function selectCredential(nextId: string) {
 	const previousType = credentialId.value ? credentialTypeById(credentialId.value) : undefined;
 	const nextType = nextId ? credentialTypeById(nextId) : undefined;
 	if (nextType === undefined || previousType !== nextType) modelName.value = '';
 	credentialId.value = nextId;
-}
-
-function holdForCredentialModal() {
-	skipNextHydrate = true;
-	open.value = false;
-}
-
-function handleCreate(credentialType: string) {
-	holdForCredentialModal();
-	createCredential(credentialType);
-}
-
-function handleEdit() {
-	if (!credentialId.value) return;
-	holdForCredentialModal();
-	editCredential(credentialId.value);
 }
 
 const isComplete = computed(() => !credentialId.value || modelName.value.trim().length > 0);
@@ -111,7 +80,7 @@ async function handlePrimary() {
 	if (isChanged.value) {
 		store.setField('modelCredentialId', credentialId.value || null);
 		store.setField('modelName', credentialId.value ? modelName.value.trim() : null);
-		await store.save();
+		if (!(await store.save())) return;
 	}
 	open.value = false;
 	emit('saved');
@@ -175,14 +144,14 @@ const description = computed(() =>
 						:label="i18n.baseText('settings.n8nAgent.credentials.edit')"
 						:disabled="store.isSaving"
 						data-test-id="n8n-agent-model-credential-edit"
-						@click="handleEdit"
+						@click="openEdit"
 					/>
 
 					<N8nDropdownMenu
 						:items="createItems"
 						placement="bottom-end"
 						data-test-id="n8n-agent-model-credential-create"
-						@select="handleCreate"
+						@select="openCreate"
 					>
 						<template #trigger>
 							<N8nButton variant="outline" size="medium" :disabled="store.isSaving">
@@ -220,6 +189,7 @@ const description = computed(() =>
 				variant="outline"
 				size="medium"
 				:label="i18n.baseText('generic.cancel')"
+				data-test-id="n8n-agent-model-dialog-cancel"
 				@click="open = false"
 			/>
 			<N8nButton

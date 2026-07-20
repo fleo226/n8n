@@ -34,8 +34,8 @@ const mockFetchSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockFetchPreferences = vi.fn();
 const mockUpdatePreferences = vi.fn();
-const mockFetchModelCredentials = vi.fn().mockResolvedValue([]);
 const mockFetchServiceCredentials = vi.fn().mockResolvedValue([]);
+const mockFetchInstanceModelCredentials = vi.fn().mockResolvedValue([]);
 const mockCreateGatewayLink = vi.fn();
 const mockDisconnectGatewaySession = vi.fn();
 
@@ -44,8 +44,8 @@ vi.mock('../instanceAi.settings.api', () => ({
 	updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
 	fetchPreferences: (...args: unknown[]) => mockFetchPreferences(...args),
 	updatePreferences: (...args: unknown[]) => mockUpdatePreferences(...args),
-	fetchModelCredentials: (...args: unknown[]) => mockFetchModelCredentials(...args),
 	fetchServiceCredentials: (...args: unknown[]) => mockFetchServiceCredentials(...args),
+	fetchInstanceModelCredentials: (...args: unknown[]) => mockFetchInstanceModelCredentials(...args),
 }));
 
 const mockGetGatewayStatus = vi.fn();
@@ -256,10 +256,9 @@ describe('useInstanceAiSettingsStore', () => {
 
 			expect(store.isWorkflowBuilderAvailable).toBe(false);
 			expect(store.isSandboxEnabled).toBe(false);
-			expect(store.sandboxUnavailableReason).toBeNull();
 		});
 
-		it('exposes the sandbox unavailable reason from module settings', () => {
+		it('keeps the builder unavailable while the sandbox is enabled', () => {
 			setModuleSettings(settingsStore, {
 				sandboxEnabled: true,
 				workflowBuilderAvailable: false,
@@ -268,7 +267,6 @@ describe('useInstanceAiSettingsStore', () => {
 
 			expect(store.isWorkflowBuilderAvailable).toBe(false);
 			expect(store.isSandboxEnabled).toBe(true);
-			expect(store.sandboxUnavailableReason).toBe('N8N_SANDBOX_SERVICE_URL is required.');
 		});
 	});
 

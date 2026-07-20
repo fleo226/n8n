@@ -9,7 +9,11 @@ import { ImportCredentialsCommand } from '@/commands/import/credentials';
 import { LoadNodesAndCredentials } from '@/load-nodes-and-credentials';
 import { setupTestCommand } from '@test-integration/utils/test-command';
 
-import { getAllCredentials, getAllSharedCredentials } from '../shared/db/credentials';
+import {
+	createCredentials,
+	getAllCredentials,
+	getAllSharedCredentials,
+} from '../shared/db/credentials';
 import { createMember, createOwner } from '../shared/db/users';
 
 type CredentialFixture = {
@@ -423,6 +427,39 @@ test('`import:credential --projectId ...` should fail if the credential already 
 			}),
 		],
 	});
+});
+
+test('import:credentials should preserve the availability of existing instance credentials', async () => {
+	//
+	// ARRANGE
+	//
+	await createOwner();
+	await createCredentials({
+		id: '123',
+		name: 'instance-model-cred',
+		type: 'aws',
+		data: 'encrypted',
+		availability: 'instance',
+	});
+
+	//
+	// ACT
+	//
+	// The fixture carries no availability field for id 123.
+	await command.run(['--input=./test/integration/commands/import-credentials/credentials.json']);
+
+	//
+	// ASSERT
+	//
+	const after = {
+		credentials: await getAllCredentials(),
+		sharings: await getAllSharedCredentials(),
+	};
+	expect(after.credentials).toEqual([
+		expect.objectContaining({ id: '123', availability: 'instance' }),
+	]);
+	// Still an instance credential, so no owner sharing may be created.
+	expect(after.sharings).toEqual([]);
 });
 
 test('`import:credential --projectId ... --userId ...` fails explaining that only one of the options can be used at a time', async () => {

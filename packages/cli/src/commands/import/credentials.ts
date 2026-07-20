@@ -154,6 +154,14 @@ export class ImportCredentialsCommand extends BaseCommand<z.infer<typeof flagsSc
 	}
 
 	private async storeCredential(credential: Partial<CredentialsEntity>, project: Project) {
+		// Availability is instance-local state; imports never change it for existing credentials.
+		if (credential.id) {
+			const existing = await this.transactionManager.findOne(CredentialsEntity, {
+				where: { id: credential.id },
+				select: ['availability'],
+			});
+			if (existing) credential.availability = existing.availability;
+		}
 		credential.availability ??= 'workflow';
 
 		if (credential.availability === 'instance') {

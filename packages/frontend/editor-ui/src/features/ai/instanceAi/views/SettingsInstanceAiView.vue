@@ -128,11 +128,7 @@ const isSetupRequired = computed(
 const neverConfigured = computed(() => {
 	if (isEnabled.value) return false;
 	if (!isSelfManaged.value || !store.settings) return true;
-	return (
-		!store.settings.modelCredentialId &&
-		!sandboxCredentialId.value &&
-		!store.settings.searchCredentialId
-	);
+	return !isModelConfigured.value && !isSandboxConfigured.value && searchState.value === 'notset';
 });
 
 const emptyStateIcon: EmptyStateIconCards = {
@@ -298,7 +294,7 @@ onMounted(() => {
 });
 
 async function handleEnable() {
-	await store.persistEnabled(true);
+	if (!(await store.persistEnabled(true))) return;
 	if (!showCredentialsRows.value) return;
 	if (!isModelConfigured.value) openModelSetup();
 	else if (!isSandboxConfigured.value) openSandboxDialog();
@@ -628,7 +624,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 										:class="$style.permissionSelect"
 										:model-value="store.getPermission(key)"
 										size="small"
-										:disabled="store.isSaving"
+										:disabled="store.isSaving || isGroupLocked(group)"
 										:data-test-id="`n8n-agent-permission-${key}`"
 										@update:model-value="
 											handlePermissionChange(key, $event as InstanceAiPermissionMode)

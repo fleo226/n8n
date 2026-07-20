@@ -736,12 +736,6 @@ export class InstanceAiController {
 		return result;
 	}
 
-	@Get('/settings/credentials')
-	@GlobalScope('instanceAi:message')
-	async listModelCredentials(req: AuthenticatedRequest) {
-		return await this.settingsService.listModelCredentials(req.user);
-	}
-
 	@Get('/settings/service-credentials')
 	@GlobalScope('instanceAi:manage')
 	async listServiceCredentials(_req: AuthenticatedRequest) {
