@@ -59,7 +59,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('not_published');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBeNull();
 			expect(result.triggers).toEqual([]);
 		});
 	});
@@ -75,7 +74,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('in_progress');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBe('v-2');
 			expect(result.triggers).toEqual([]);
 		});
 	});
@@ -91,7 +89,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('in_progress');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBe('v-2');
 			expect(result.triggers).toEqual([]);
 		});
 	});
@@ -109,7 +106,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('in_progress');
 			expect(result.liveVersionId).toBe('v-1');
-			expect(result.pendingVersionId).toBe('v-2');
 		});
 	});
 
@@ -125,7 +121,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('published');
 			expect(result.liveVersionId).toBe('v-2');
-			expect(result.pendingVersionId).toBeNull();
 		});
 	});
 
@@ -141,7 +136,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('partial');
 			expect(result.liveVersionId).toBe('v-2');
-			expect(result.pendingVersionId).toBeNull();
 		});
 	});
 
@@ -157,7 +151,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('failed');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBeNull();
 		});
 	});
 
@@ -170,7 +163,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('not_published');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBeNull();
 		});
 	});
 
@@ -183,7 +175,6 @@ describe('WorkflowPublicationStatusService', () => {
 
 			expect(result.status).toBe('not_published');
 			expect(result.liveVersionId).toBeNull();
-			expect(result.pendingVersionId).toBeNull();
 		});
 	});
 
