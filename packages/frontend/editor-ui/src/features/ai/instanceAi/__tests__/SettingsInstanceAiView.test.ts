@@ -8,7 +8,9 @@ import SettingsInstanceAiCredentialsView from '../views/SettingsInstanceAiCreden
 import SettingsInstanceAiView from '../views/SettingsInstanceAiView.vue';
 import { useInstanceAiSettingsStore } from '../instanceAiSettings.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
+import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import type { FrontendModuleSettings } from '@n8n/api-types';
+import type { ICredentialType } from 'n8n-workflow';
 
 vi.mock('@n8n/i18n', async (importOriginal) => ({
 	...(await importOriginal()),
@@ -109,6 +111,10 @@ describe('SettingsInstanceAiView', () => {
 		computerUseExperimentMock.mockReturnValue({ isFeatureEnabled: ref(true) });
 		const pinia = createTestingPinia({ stubActions: false });
 		setActivePinia(pinia);
+		useCredentialsStore().setCredentialTypes([
+			{ name: 'openAiApi', displayName: 'OpenAI', properties: [] },
+			{ name: 'anthropicApi', displayName: 'Anthropic', properties: [] },
+		] satisfies ICredentialType[]);
 		store = useInstanceAiSettingsStore();
 		settingsStore = useSettingsStore();
 		setModuleSettings(settingsStore, { ...defaultModuleSettings });
@@ -146,7 +152,7 @@ describe('SettingsInstanceAiView', () => {
 					{ id: 'openai-id', name: 'OpenAI', type: 'openAiApi', provider: 'openai' },
 					{
 						id: 'anthropic-id',
-						name: 'Anthropic',
+						name: 'Anthropic production',
 						type: 'anthropicApi',
 						provider: 'anthropic',
 					},
@@ -157,7 +163,7 @@ describe('SettingsInstanceAiView', () => {
 
 			const select = getByTestId('n8n-agent-model-credential-select');
 			await fireEvent.click(select.querySelector('input')!);
-			await fireEvent.click(getByText('Anthropic (anthropic)'));
+			await fireEvent.click(getByText('Anthropic production · Anthropic'));
 
 			expect(store.draft).toMatchObject({
 				modelCredentialId: 'anthropic-id',
