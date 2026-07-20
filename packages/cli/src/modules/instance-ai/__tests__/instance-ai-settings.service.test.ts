@@ -423,6 +423,30 @@ describe('InstanceAiSettingsService', () => {
 			).resolves.toEqual({ id: 'openai/gpt-user', url: '', apiKey: 'user-key' });
 		});
 
+		it('skips an instance credential assignment without an instance model', async () => {
+			instanceCredentialBroker.resolveForConsumer.mockResolvedValue({
+				id: 'admin-credential',
+				name: 'Admin model',
+				type: 'openAiApi',
+				data: { apiKey: 'admin-key' },
+			});
+			credentialsFinderService.findCredentialForUser.mockResolvedValue(
+				mock<CredentialsEntity>({ id: 'user-credential', type: 'openAiApi' }),
+			);
+			credentialsService.decrypt.mockResolvedValue({ apiKey: 'user-key' });
+
+			await expect(
+				service.resolveModelConfig(
+					mock<User>({
+						settings: {
+							instanceAi: { credentialId: 'user-credential', modelName: 'gpt-user' },
+						},
+					}),
+				),
+			).resolves.toEqual({ id: 'openai/gpt-user', url: '', apiKey: 'user-key' });
+			expect(instanceCredentialBroker.resolveForConsumer).not.toHaveBeenCalled();
+		});
+
 		it('reads the configured model credential from the broker', async () => {
 			instanceCredentialBroker.getAssignedCredentialId.mockResolvedValue('cred-1');
 

@@ -599,9 +599,9 @@ export class InstanceAiSettingsService {
 		const prefs = this.readUserPreferences(user);
 		const fallbackModelName = prefs.modelName ?? this.extractModelName(this.config.model);
 
-		const adminModelConfig = await this.resolveAdminModelConfig(
-			this.adminModelName ?? fallbackModelName,
-		);
+		const adminModelConfig = this.adminModelName
+			? await this.resolveAdminModelConfig(this.adminModelName)
+			: null;
 		if (adminModelConfig) {
 			return adminModelConfig;
 		}
