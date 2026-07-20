@@ -4,6 +4,7 @@ import { fireEvent, waitFor } from '@testing-library/vue';
 import { createTestingPinia } from '@pinia/testing';
 import { setActivePinia } from 'pinia';
 import { createComponentRenderer } from '@/__tests__/render';
+import SettingsInstanceAiCredentialsView from '../views/SettingsInstanceAiCredentialsView.vue';
 import SettingsInstanceAiView from '../views/SettingsInstanceAiView.vue';
 import { useInstanceAiSettingsStore } from '../instanceAiSettings.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
@@ -58,6 +59,11 @@ const { mcpConnectionsExperimentMock, computerUseExperimentMock, browserUseExper
 		computerUseExperimentMock: vi.fn(),
 	}));
 
+vi.mock('vue-router', async (importOriginal) => ({
+	...(await importOriginal()),
+	useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock('@/experiments/instanceAiMcpConnections', () => ({
 	useInstanceAiMcpConnectionsExperiment: mcpConnectionsExperimentMock,
 }));
@@ -70,19 +76,8 @@ vi.mock('@/experiments/instanceAiComputerUse', () => ({
 	useInstanceAiComputerUseExperiment: computerUseExperimentMock,
 }));
 
-const renderComponent = createComponentRenderer(SettingsInstanceAiView, {
-	global: {
-		stubs: {
-			// jsdom can't drive element-plus's ElSwitch (it touches a null input ref),
-			// so stub it with a button that emits the toggled value.
-			ElSwitch: {
-				props: ['modelValue', 'disabled'],
-				template:
-					'<button type="button" role="switch" :data-test-id="$attrs[\'data-test-id\']" :aria-checked="!!modelValue" :disabled="disabled" @click="$emit(\'update:modelValue\', !modelValue)" />',
-			},
-		},
-	},
-});
+const renderComponent = createComponentRenderer(SettingsInstanceAiView);
+const renderCredentialsComponent = createComponentRenderer(SettingsInstanceAiCredentialsView);
 
 function setModuleSettings(
 	settingsStore: ReturnType<typeof useSettingsStore>,
@@ -139,7 +134,7 @@ describe('SettingsInstanceAiView', () => {
 
 	describe('Model credential settings', () => {
 		it('stages a provider switch and only saves once a model name is committed', async () => {
-			const { getByTestId, getByText } = renderComponent();
+			const { getByTestId, getByText } = renderCredentialsComponent();
 			await waitFor(() => expect(store.isLoading).toBe(false));
 			store.$patch({
 				settings: {
@@ -189,7 +184,7 @@ describe('SettingsInstanceAiView', () => {
 	});
 
 	describe('env-only config', () => {
-		// Search, sandbox and advanced options remain environment-managed.
+		// Search, sandbox, and advanced options remain environment-managed.
 		it.each([
 			['search', 'instanceAi.settings.section.search'],
 			['sandbox', 'instanceAi.settings.section.sandbox'],
@@ -204,9 +199,9 @@ describe('SettingsInstanceAiView', () => {
 			expect(getByText('settings.n8nAgent.permissions.title')).toBeVisible();
 		});
 
-		it('renders the Enable toggle', () => {
+		it('renders the enabled status action', () => {
 			const { getByTestId } = renderComponent();
-			expect(getByTestId('n8n-agent-enable-toggle')).toBeVisible();
+			expect(getByTestId('n8n-agent-status-menu')).toBeVisible();
 		});
 	});
 
