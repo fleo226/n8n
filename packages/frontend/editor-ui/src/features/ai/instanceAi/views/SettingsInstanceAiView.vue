@@ -254,6 +254,39 @@ function permissionOptionsFor(key: keyof InstanceAiPermissions) {
 const modelDialogOpen = ref(false);
 const sandboxDialogOpen = ref(false);
 const searchDialogOpen = ref(false);
+// First-run chain: model (step 1) → sandbox (step 2). Only advances on save.
+const setupChain = ref(false);
+
+function openModelDialog() {
+	setupChain.value = false;
+	modelDialogOpen.value = true;
+}
+
+function openModelSetup() {
+	setupChain.value = !isSandboxConfigured.value;
+	modelDialogOpen.value = true;
+}
+
+function openSandboxDialog() {
+	setupChain.value = false;
+	sandboxDialogOpen.value = true;
+}
+
+function handleModelSaved() {
+	if (setupChain.value && !isSandboxConfigured.value) {
+		sandboxDialogOpen.value = true;
+		return;
+	}
+	setupChain.value = false;
+}
+
+function handleSandboxSaved() {
+	setupChain.value = false;
+}
+
+function handleSandboxBack() {
+	modelDialogOpen.value = true;
+}
 
 function credentialTypeLabel(type: string) {
 	return credentialsStore.getCredentialTypeByName(type)?.displayName ?? type;
@@ -266,6 +299,9 @@ onMounted(() => {
 
 async function handleEnable() {
 	await store.persistEnabled(true);
+	if (!showCredentialsRows.value) return;
+	if (!isModelConfigured.value) openModelSetup();
+	else if (!isSandboxConfigured.value) openSandboxDialog();
 }
 
 async function handleStatusAction(action: string) {
@@ -401,7 +437,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 						:class="{ [$style.dim]: isOff }"
 						:clickable="!isOff && isModelConfigured"
 						data-test-id="n8n-agent-model-row"
-						@click="modelDialogOpen = true"
+						@click="openModelDialog"
 					>
 						<template #info>
 							<N8nText bold size="medium" color="text-dark">
@@ -419,7 +455,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 								:label="i18n.baseText('settings.n8nAgent.modelCredential.add')"
 								:disabled="store.isSaving"
 								data-test-id="n8n-agent-model-add"
-								@click="modelDialogOpen = true"
+								@click="openModelSetup"
 							/>
 							<N8nSettingsRowConfigure v-else :value="modelValue" />
 						</template>
@@ -430,7 +466,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 						:class="{ [$style.dim]: isOff }"
 						:clickable="!isOff && isSandboxConfigured"
 						data-test-id="n8n-agent-sandbox-row"
-						@click="sandboxDialogOpen = true"
+						@click="openSandboxDialog"
 					>
 						<template #info>
 							<N8nText bold size="medium" color="text-dark">
@@ -448,7 +484,7 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 								:label="i18n.baseText('settings.n8nAgent.sandbox.add')"
 								:disabled="store.isSaving"
 								data-test-id="n8n-agent-sandbox-add"
-								@click="sandboxDialogOpen = true"
+								@click="openSandboxDialog"
 							/>
 							<N8nSettingsRowConfigure v-else :value="sandboxValue" />
 						</template>
@@ -613,8 +649,17 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 			</N8nSettingsSection>
 
 			<template v-if="showCredentialsRows">
-				<ModelCredentialDialog v-model:open="modelDialogOpen" />
-				<SandboxCredentialDialog v-model:open="sandboxDialogOpen" />
+				<ModelCredentialDialog
+					v-model:open="modelDialogOpen"
+					:setup="setupChain"
+					@saved="handleModelSaved"
+				/>
+				<SandboxCredentialDialog
+					v-model:open="sandboxDialogOpen"
+					:setup="setupChain"
+					@saved="handleSandboxSaved"
+					@back="handleSandboxBack"
+				/>
 				<SearchCredentialDialog v-model:open="searchDialogOpen" />
 			</template>
 		</template>

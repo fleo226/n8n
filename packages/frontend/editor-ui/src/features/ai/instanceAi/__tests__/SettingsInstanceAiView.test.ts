@@ -9,6 +9,7 @@ import ModelCredentialDialog from '../components/settings/ModelCredentialDialog.
 import { useInstanceAiSettingsStore } from '../instanceAiSettings.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
+import { fetchInstanceModelCredentials } from '../instanceAi.settings.api';
 import type { FrontendModuleSettings } from '@n8n/api-types';
 import type { ICredentialType } from 'n8n-workflow';
 
@@ -185,6 +186,98 @@ describe('SettingsInstanceAiView', () => {
 				modelName: 'claude-sonnet-4',
 			});
 			expect(save).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe('setup chain', () => {
+		beforeEach(() => {
+			// The view's onMounted fetch overwrites the store list, so mock the API too.
+			vi.mocked(fetchInstanceModelCredentials).mockResolvedValue([
+				{ id: 'openai-id', name: 'OpenAI account', type: 'openAiApi', provider: 'openai' },
+			]);
+			store.$patch({
+				instanceModelCredentials: [
+					{ id: 'openai-id', name: 'OpenAI account', type: 'openAiApi', provider: 'openai' },
+				],
+			});
+			// Applying the draft mimics a real save so reopened dialogs hydrate correctly.
+			vi.spyOn(store, 'save').mockImplementation(async () => {
+				store.$patch({
+					settings: { ...store.settings!, ...store.draft },
+				});
+				store.reset();
+			});
+		});
+
+		async function completeModelStep(
+			findByTestId: (id: string) => Promise<HTMLElement>,
+			getByTestId: (id: string) => HTMLElement,
+			findByText: (text: string) => Promise<HTMLElement>,
+		) {
+			const select = await findByTestId('n8n-agent-model-credential-select');
+			await fireEvent.click(select.querySelector('input')!);
+			await fireEvent.click(await findByText('OpenAI account · OpenAI'));
+			const modelNameField = getByTestId('n8n-agent-model-name-input');
+			const modelNameInput =
+				modelNameField.tagName === 'INPUT'
+					? (modelNameField as HTMLInputElement)
+					: modelNameField.querySelector('input')!;
+			await fireEvent.update(modelNameInput, 'gpt-4.1');
+			await fireEvent.click(getByTestId('n8n-agent-model-dialog-save'));
+		}
+
+		it('chains model setup into the sandbox step when both are unconfigured', async () => {
+			const { findByTestId, findByText, getByTestId, queryByTestId } = renderComponent();
+
+			await fireEvent.click(getByTestId('n8n-agent-model-add'));
+			expect(await findByTestId('n8n-agent-model-dialog-step')).toBeVisible();
+
+			await completeModelStep(findByTestId, getByTestId, findByText);
+
+			await waitFor(() => expect(getByTestId('n8n-agent-sandbox-dialog-step')).toBeVisible());
+			expect(queryByTestId('n8n-agent-sandbox-dialog-back')).toBeVisible();
+		});
+
+		it('lets the user go back to step one and continue without changes', async () => {
+			const { findByTestId, findByText, getByTestId } = renderComponent();
+
+			await fireEvent.click(getByTestId('n8n-agent-model-add'));
+			await completeModelStep(findByTestId, getByTestId, findByText);
+			await waitFor(() => expect(getByTestId('n8n-agent-sandbox-dialog-back')).toBeVisible());
+
+			await fireEvent.click(getByTestId('n8n-agent-sandbox-dialog-back'));
+			await waitFor(() => expect(getByTestId('n8n-agent-model-dialog-step')).toBeVisible());
+
+			// Nothing changed, but Continue must still advance to step two.
+			const continueButton = getByTestId('n8n-agent-model-dialog-save');
+			expect(continueButton).not.toBeDisabled();
+			await fireEvent.click(continueButton);
+			await waitFor(() => expect(getByTestId('n8n-agent-sandbox-dialog-step')).toBeVisible());
+		});
+
+		it('opens a plain dialog when only the model is missing', async () => {
+			store.$patch({
+				settings: { ...store.settings!, sandboxEnvConfigured: true },
+			});
+			const { findByTestId, getByTestId, queryByTestId } = renderComponent();
+
+			await fireEvent.click(getByTestId('n8n-agent-model-add'));
+
+			expect(await findByTestId('n8n-agent-model-credential-select')).toBeVisible();
+			expect(queryByTestId('n8n-agent-model-dialog-step')).toBeNull();
+		});
+
+		it('opens a plain sandbox dialog when only the sandbox is missing', async () => {
+			store.$patch({
+				settings: { ...store.settings!, modelEnvConfigured: true },
+			});
+			const { findByTestId, getByTestId, queryByTestId } = renderComponent();
+
+			await fireEvent.click(getByTestId('n8n-agent-sandbox-add'));
+
+			expect(await findByTestId('n8n-agent-sandbox-credential-select')).toBeVisible();
+			expect(queryByTestId('n8n-agent-sandbox-dialog-step')).toBeNull();
+			expect(queryByTestId('n8n-agent-sandbox-dialog-back')).toBeNull();
 		});
 	});
 

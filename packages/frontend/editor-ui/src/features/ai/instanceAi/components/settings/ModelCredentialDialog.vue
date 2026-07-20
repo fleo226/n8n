@@ -3,7 +3,10 @@ import { computed, ref, watch } from 'vue';
 import {
 	N8nButton,
 	N8nDialog,
+	N8nDialogDescription,
 	N8nDialogFooter,
+	N8nDialogHeader,
+	N8nDialogTitle,
 	N8nDropdownMenu,
 	N8nIcon,
 	N8nInput,
@@ -20,6 +23,10 @@ import { useInstanceAiSettingsStore } from '../../instanceAiSettings.store';
 import { useInstanceCredentialEditor } from '../../composables/useInstanceCredentialEditor';
 
 const open = defineModel<boolean>('open', { required: true });
+
+const props = withDefaults(defineProps<{ setup?: boolean }>(), { setup: false });
+
+const emit = defineEmits<{ saved: [] }>();
 
 const i18n = useI18n();
 const store = useInstanceAiSettingsStore();
@@ -93,23 +100,53 @@ const isChanged = computed(
 		credentialId.value !== (store.settings?.modelCredentialId ?? '') ||
 		modelName.value.trim() !== (store.settings?.modelName ?? ''),
 );
+// In setup mode an unchanged-but-configured model may Continue (e.g. after Back from step 2).
+const primaryDisabled = computed(() => {
+	if (store.isSaving || !isComplete.value) return true;
+	if (props.setup) return !isChanged.value && !credentialId.value;
+	return !isChanged.value;
+});
 
-async function handleSave() {
-	store.setField('modelCredentialId', credentialId.value || null);
-	store.setField('modelName', credentialId.value ? modelName.value.trim() : null);
-	await store.save();
+async function handlePrimary() {
+	if (isChanged.value) {
+		store.setField('modelCredentialId', credentialId.value || null);
+		store.setField('modelName', credentialId.value ? modelName.value.trim() : null);
+		await store.save();
+	}
 	open.value = false;
+	emit('saved');
 }
+
+const title = computed(() =>
+	props.setup
+		? i18n.baseText('settings.n8nAgent.modelDialog.setupTitle')
+		: i18n.baseText('settings.n8nAgent.modelDialog.title'),
+);
+const description = computed(() =>
+	props.setup
+		? i18n.baseText('settings.n8nAgent.modelDialog.setupDescription')
+		: i18n.baseText('settings.n8nAgent.modelDialog.description'),
+);
 </script>
 
 <template>
-	<N8nDialog
-		v-model:open="open"
-		size="small"
-		:header="i18n.baseText('settings.n8nAgent.modelDialog.title')"
-		:description="i18n.baseText('settings.n8nAgent.modelDialog.description')"
-		data-test-id="n8n-agent-model-dialog"
-	>
+	<N8nDialog v-model:open="open" size="small" data-test-id="n8n-agent-model-dialog">
+		<N8nDialogHeader>
+			<N8nText
+				v-if="setup"
+				:class="$style.step"
+				size="xsmall"
+				color="text-light"
+				bold
+				tag="p"
+				data-test-id="n8n-agent-model-dialog-step"
+			>
+				{{ i18n.baseText('settings.n8nAgent.setup.step1') }}
+			</N8nText>
+			<N8nDialogTitle>{{ title }}</N8nDialogTitle>
+			<N8nDialogDescription>{{ description }}</N8nDialogDescription>
+		</N8nDialogHeader>
+
 		<div :class="$style.fields">
 			<N8nInputLabel :label="i18n.baseText('settings.n8nAgent.modelCredential.field')">
 				<div :class="$style.credentialControls">
@@ -188,10 +225,12 @@ async function handleSave() {
 			<N8nButton
 				variant="solid"
 				size="medium"
-				:label="i18n.baseText('generic.save')"
-				:disabled="store.isSaving || !isComplete || !isChanged"
+				:label="
+					setup ? i18n.baseText('settings.n8nAgent.setup.continue') : i18n.baseText('generic.save')
+				"
+				:disabled="primaryDisabled"
 				data-test-id="n8n-agent-model-dialog-save"
-				@click="handleSave"
+				@click="handlePrimary"
 			/>
 		</N8nDialogFooter>
 	</N8nDialog>
@@ -219,5 +258,11 @@ async function handleSave() {
 
 .footnote {
 	margin: var(--spacing--sm) 0 0;
+}
+
+.step {
+	margin: 0;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
 }
 </style>

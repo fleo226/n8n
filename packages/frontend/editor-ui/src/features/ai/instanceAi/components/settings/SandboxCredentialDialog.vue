@@ -3,7 +3,10 @@ import { computed, ref, watch } from 'vue';
 import {
 	N8nButton,
 	N8nDialog,
+	N8nDialogDescription,
 	N8nDialogFooter,
+	N8nDialogHeader,
+	N8nDialogTitle,
 	N8nInputLabel,
 	N8nOption,
 	N8nSelect,
@@ -14,6 +17,10 @@ import { useInstanceAiSettingsStore } from '../../instanceAiSettings.store';
 import { useInstanceCredentialEditor } from '../../composables/useInstanceCredentialEditor';
 
 const open = defineModel<boolean>('open', { required: true });
+
+const props = withDefaults(defineProps<{ setup?: boolean }>(), { setup: false });
+
+const emit = defineEmits<{ saved: []; back: [] }>();
 
 const i18n = useI18n();
 const store = useInstanceAiSettingsStore();
@@ -84,17 +91,41 @@ async function handleSave() {
 	store.setField(credentialField.value, credentialId.value || null);
 	await store.save();
 	open.value = false;
+	emit('saved');
 }
+
+function handleBack() {
+	open.value = false;
+	emit('back');
+}
+
+const title = computed(() =>
+	props.setup
+		? i18n.baseText('settings.n8nAgent.sandboxDialog.setupTitle')
+		: i18n.baseText('settings.n8nAgent.sandboxDialog.title'),
+);
 </script>
 
 <template>
-	<N8nDialog
-		v-model:open="open"
-		size="small"
-		:header="i18n.baseText('settings.n8nAgent.sandboxDialog.title')"
-		:description="i18n.baseText('settings.n8nAgent.sandboxDialog.description')"
-		data-test-id="n8n-agent-sandbox-dialog"
-	>
+	<N8nDialog v-model:open="open" size="small" data-test-id="n8n-agent-sandbox-dialog">
+		<N8nDialogHeader>
+			<N8nText
+				v-if="setup"
+				:class="$style.step"
+				size="xsmall"
+				color="text-light"
+				bold
+				tag="p"
+				data-test-id="n8n-agent-sandbox-dialog-step"
+			>
+				{{ i18n.baseText('settings.n8nAgent.setup.step2') }}
+			</N8nText>
+			<N8nDialogTitle>{{ title }}</N8nDialogTitle>
+			<N8nDialogDescription>
+				{{ i18n.baseText('settings.n8nAgent.sandboxDialog.description') }}
+			</N8nDialogDescription>
+		</N8nDialogHeader>
+
 		<div :class="$style.fields">
 			<N8nInputLabel :label="i18n.baseText('settings.n8nAgent.sandboxDialog.provider')">
 				<N8nText tag="p" :class="$style.providerValue" size="medium" color="text-dark">
@@ -149,6 +180,15 @@ async function handleSave() {
 
 		<N8nDialogFooter>
 			<N8nButton
+				v-if="setup"
+				variant="outline"
+				size="medium"
+				:label="i18n.baseText('generic.back')"
+				data-test-id="n8n-agent-sandbox-dialog-back"
+				@click="handleBack"
+			/>
+			<N8nButton
+				v-else
 				variant="outline"
 				size="medium"
 				:label="i18n.baseText('generic.cancel')"
@@ -192,5 +232,11 @@ async function handleSave() {
 
 .providerHint {
 	margin: var(--spacing--4xs) 0 0;
+}
+
+.step {
+	margin: 0;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
 }
 </style>
