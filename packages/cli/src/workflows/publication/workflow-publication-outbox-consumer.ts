@@ -215,7 +215,6 @@ export class WorkflowPublicationOutboxConsumer {
 				attributes: {
 					...this.tracing.pickWorkflowAttributes({ id: record.workflowId }),
 					'n8n.publication.outbox_id': record.id,
-					'n8n.publication.published_version_id': record.publishedVersionId,
 				},
 			},
 			async (span) => {
@@ -235,7 +234,6 @@ export class WorkflowPublicationOutboxConsumer {
 					this.logger.debug('Started processing workflow publication outbox record', {
 						outboxId: record.id,
 						workflowId: record.workflowId,
-						publishedVersionId: record.publishedVersionId,
 					});
 
 					const startedAt = Date.now();

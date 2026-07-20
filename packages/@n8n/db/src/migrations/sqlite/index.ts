@@ -217,6 +217,7 @@ import { AddTriggerKindToWorkflowPublicationTriggerStatus1784000000048 } from '.
 import { AddScheduledTaskDispatchedAt1784000000049 } from '../common/1784000000049-AddScheduledTaskDispatchedAt';
 import { AddHostRunIdToInstanceAiCheckpoints1784000000050 } from '../common/1784000000050-AddHostRunIdToInstanceAiCheckpoints';
 import { BackfillInstanceAiEventLog1784000000051 } from '../common/1784000000051-BackfillInstanceAiEventLog';
+import { MakeOutboxPublishedVersionIdNullable1784564167057 } from '../common/1784564167057-MakeOutboxPublishedVersionIdNullable';
 
 const sqliteMigrations: Migration[] = [
 	InitialMigration1588102412422,
@@ -437,6 +438,7 @@ const sqliteMigrations: Migration[] = [
 	AddScheduledTaskDispatchedAt1784000000049,
 	AddHostRunIdToInstanceAiCheckpoints1784000000050,
 	BackfillInstanceAiEventLog1784000000051,
+	MakeOutboxPublishedVersionIdNullable1784564167057,
 ];
 
 export { sqliteMigrations };
