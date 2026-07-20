@@ -328,20 +328,23 @@ function handlePermissionChange(key: keyof InstanceAiPermissions, value: Instanc
 						</div>
 					</div>
 					<div v-if="selectedModelCredentialId" :class="$style.settingsRow">
-						<div :class="$style.settingsRowLeft">
+						<label :class="$style.settingsRowLeft" for="n8n-agent-model-name-input">
 							<span :class="$style.settingsRowLabel">
 								{{ i18n.baseText('settings.n8nAgent.modelName.label') }}
 							</span>
 							<span :class="$style.settingsRowDescription">
 								{{ i18n.baseText('settings.n8nAgent.modelName.description') }}
 							</span>
-						</div>
+						</label>
 						<N8nInput
 							ref="modelNameInputRef"
+							id="n8n-agent-model-name-input"
 							:class="$style.modelNameInput"
 							:model-value="modelNameValue"
 							size="small"
 							:disabled="store.isSaving"
+							autocomplete="off"
+							:spellcheck="false"
 							:placeholder="i18n.baseText('settings.n8nAgent.modelName.placeholder')"
 							data-test-id="n8n-agent-model-name-input"
 							@update:model-value="handleModelNameInput"
