@@ -596,14 +596,17 @@ export class InstanceAiSettingsService {
 	}
 
 	async resolveModelConfig(user: User): Promise<ModelConfig> {
-		const modelName = this.resolveModelName(user);
+		const prefs = this.readUserPreferences(user);
+		const fallbackModelName = prefs.modelName ?? this.extractModelName(this.config.model);
 
-		const adminModelConfig = await this.resolveAdminModelConfig(modelName);
+		const adminModelConfig = await this.resolveAdminModelConfig(
+			this.adminModelName ?? fallbackModelName,
+		);
 		if (adminModelConfig) {
 			return adminModelConfig;
 		}
 
-		const credentialId = this.readUserPreferences(user).credentialId ?? null;
+		const credentialId = prefs.credentialId ?? null;
 
 		if (!credentialId) {
 			return this.envVarModelConfig();
@@ -620,7 +623,8 @@ export class InstanceAiSettingsService {
 		}
 
 		return (
-			(await this.buildModelConfigFromCredential(credential, modelName)) ?? this.envVarModelConfig()
+			(await this.buildModelConfigFromCredential(credential, fallbackModelName)) ??
+			this.envVarModelConfig()
 		);
 	}
 

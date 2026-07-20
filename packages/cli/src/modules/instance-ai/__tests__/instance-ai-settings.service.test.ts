@@ -396,6 +396,33 @@ describe('InstanceAiSettingsService', () => {
 			);
 		});
 
+		it('keeps the user model paired with the user credential on fallback', async () => {
+			instanceCredentialBroker.assignForConsumer.mockResolvedValue({
+				id: 'admin-credential',
+				name: 'Admin model',
+				type: 'openAiApi',
+			});
+			await service.updateAdminSettings({
+				modelCredentialId: 'admin-credential',
+				modelName: 'gpt-admin',
+			});
+			instanceCredentialBroker.resolveForConsumer.mockResolvedValue(null);
+			credentialsFinderService.findCredentialForUser.mockResolvedValue(
+				mock<CredentialsEntity>({ id: 'user-credential', type: 'openAiApi' }),
+			);
+			credentialsService.decrypt.mockResolvedValue({ apiKey: 'user-key' });
+
+			await expect(
+				service.resolveModelConfig(
+					mock<User>({
+						settings: {
+							instanceAi: { credentialId: 'user-credential', modelName: 'gpt-user' },
+						},
+					}),
+				),
+			).resolves.toEqual({ id: 'openai/gpt-user', url: '', apiKey: 'user-key' });
+		});
+
 		it('reads the configured model credential from the broker', async () => {
 			instanceCredentialBroker.getAssignedCredentialId.mockResolvedValue('cred-1');
 
