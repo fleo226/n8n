@@ -363,7 +363,9 @@ export const useInstanceAiSettingsStore = defineStore('instanceAiSettings', () =
 		key: K,
 		value: InstanceAiAdminSettingsUpdateRequest[K],
 	): void {
-		draft[key] = value;
+		// undefined unstages the field so it is not sent on the next save
+		if (value === undefined) delete draft[key];
+		else draft[key] = value;
 	}
 
 	function setPreferenceField<K extends keyof InstanceAiUserPreferencesUpdateRequest>(

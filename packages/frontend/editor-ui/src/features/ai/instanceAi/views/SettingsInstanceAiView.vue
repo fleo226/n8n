@@ -161,7 +161,13 @@ function handleModelNameInput(value: string) {
 
 function handleModelNameCommit() {
 	if (store.draft.modelName === undefined && store.draft.modelCredentialId === undefined) return;
-	store.setField('modelName', modelNameValue.value.trim() || null);
+	const modelName = modelNameValue.value.trim();
+	if (!modelName) {
+		// The credential and model only save as a complete pair; wait for a model name
+		if (store.draft.modelCredentialId === undefined) store.setField('modelName', undefined);
+		return;
+	}
+	store.setField('modelName', modelName);
 	void store.save();
 }
 

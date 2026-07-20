@@ -1,0 +1,37 @@
+Initializing n8n process
+Deprecation warning: The storage directory "/Users/albertalises/.n8n/binaryData" will be renamed to "/Users/albertalises/.n8n/storage" in n8n v3. To migrate now, set N8N_MIGRATE_FS_STORAGE_PATH=true. If you have a volume mounted at the old path, update your mount configuration after migration.
+n8n ready on ::, port 5678
+n8n Task Broker ready on 127.0.0.1, port 5679
+Failed to start Python task runner in internal mode. because its virtual environment is missing from this system. Launching a Python runner in internal mode is intended only for debugging and is not recommended for production. Users are encouraged to deploy in external mode. See: https://docs.n8n.io/hosting/configuration/task-runners/#setting-up-external-mode
+
+There are deprecations related to your n8n setup. Please take the recommended actions to update your configuration:
+ - N8N_UNVERIFIED_PACKAGES_ENABLED -> The default for this variable will change to `false` in a future version. Set it to `true` explicitly to keep installing unverified community packages.
+ - N8N_RUNNERS_TASK_TIMEOUT -> The default for this variable will be reduced from 300 (5 minutes) to 60 (1 minute) in a future version. Set it explicitly to keep your current task timeout.
+ - N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES -> The default for this variable will be reduced from 2 GiB to 256 MiB in a future version. Set it explicitly to keep your current limit.
+ - N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES -> The default for this variable will be reduced from 5000 to 1000 in a future version. Set it explicitly to keep your current limit.
+ - Running n8n outside a container is deprecated. Future versions will require running n8n via the official Docker image. See https://docs.n8n.io/deploy/host-n8n/install-options/install-with-docker
+
+[license SDK] cert state: expiresAt=2026-07-24T08:24:08.503Z terminatesAt=2051-06-19T10:52:42.135Z issuedAt=2026-07-20T08:24:08.550Z msToExpiry=345235325 msToTermination=786248548957 isValid=true isRenewalDue=false detachedEntitlementsCount=0 entitlements=1 enabledFeatures=42
+[license SDK] Skipping renewal on init: license cert is not due for renewal
+(node:16459) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Registered runner "JS Task Runner" (8Wa3Od2oFJKvOAMLp4-Il) 
+Seeded system credential resolver "system-n8n"
+Instance registered
+Discovered 4 cluster checks
+[33m[Instance AI] 'instance-ai' module is experimental, undocumented and subject to change. Before its official release any features may become inaccessible at any point, and using the module could compromise the stability of your system. Use at your own risk![0m
+Sandbox: enabled=true provider=daytona (from env)
+Failed to initialize auth handler "ldap": Could not find any entity of type "Settings" matching: {
+    "key": "features.ldap"
+}
+Version: 2.31.0
+Building workflow dependency index...
+Finished building workflow dependency index. Processed 0 draft workflows, 0 published workflows.
+
+Editor is now accessible via:
+http://localhost:5678
+(node:16459) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+404 Workflow with ID "jHOyS0Y5A0yLz9vY" does not exist
+404 Workflow with ID "mnC8eAlt-3gsQDftL0fNZ" does not exist
+404 Workflow with ID "jHOyS0Y5A0yLz9vY" does not exist
+404 Workflow with ID "mnC8eAlt-3gsQDftL0fNZ" does not exist

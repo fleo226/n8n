@@ -138,7 +138,7 @@ describe('SettingsInstanceAiView', () => {
 	});
 
 	describe('Model credential settings', () => {
-		it('clears the old model when switching credential providers', async () => {
+		it('stages a provider switch and only saves once a model name is committed', async () => {
 			const { getByTestId, getByText } = renderComponent();
 			await waitFor(() => expect(store.isLoading).toBe(false));
 			store.$patch({
@@ -167,6 +167,22 @@ describe('SettingsInstanceAiView', () => {
 			expect(store.draft).toMatchObject({
 				modelCredentialId: 'anthropic-id',
 				modelName: null,
+			});
+
+			const modelNameField = getByTestId('n8n-agent-model-name-input');
+			const modelNameInput =
+				modelNameField.tagName === 'INPUT'
+					? (modelNameField as HTMLInputElement)
+					: modelNameField.querySelector('input')!;
+			await fireEvent.blur(modelNameInput);
+			expect(save).not.toHaveBeenCalled();
+
+			await fireEvent.update(modelNameInput, 'claude-sonnet-4');
+			await fireEvent.keyUp(modelNameInput, { key: 'Enter' });
+
+			expect(store.draft).toMatchObject({
+				modelCredentialId: 'anthropic-id',
+				modelName: 'claude-sonnet-4',
 			});
 			expect(save).toHaveBeenCalledOnce();
 		});

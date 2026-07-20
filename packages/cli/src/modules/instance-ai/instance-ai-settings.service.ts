@@ -182,23 +182,23 @@ export class InstanceAiSettingsService {
 
 	async getAdminSettings(): Promise<InstanceAiAdminSettingsResponse> {
 		const c = this.config;
-		const credentialIds: [string | null, string | null, string | null, string | null] =
-			this.isCloud || this.aiService.isProxyEnabled()
-				? [null, null, null, null]
-				: await Promise.all([
-						this.instanceCredentialBroker.getAssignedCredentialId(
-							INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
-						),
-						this.instanceCredentialBroker.getAssignedCredentialId(
-							INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
-						),
-						this.instanceCredentialBroker.getAssignedCredentialId(
-							INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
-						),
-						this.instanceCredentialBroker.getAssignedCredentialId(
-							INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id,
-						),
-					]);
+		const isManaged = this.isCloud || this.aiService.isProxyEnabled();
+		const credentialIds: [string | null, string | null, string | null, string | null] = isManaged
+			? [null, null, null, null]
+			: await Promise.all([
+					this.instanceCredentialBroker.getAssignedCredentialId(
+						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
+					),
+					this.instanceCredentialBroker.getAssignedCredentialId(
+						INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
+					),
+					this.instanceCredentialBroker.getAssignedCredentialId(
+						INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
+					),
+					this.instanceCredentialBroker.getAssignedCredentialId(
+						INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id,
+					),
+				]);
 		const [modelCredentialId, daytonaCredentialId, n8nSandboxCredentialId, searchCredentialId] =
 			credentialIds;
 		return {
@@ -214,7 +214,7 @@ export class InstanceAiSettingsService {
 			n8nSandboxCredentialId,
 			searchCredentialId,
 			modelCredentialId,
-			modelName: this.adminModelName,
+			modelName: isManaged ? null : this.adminModelName,
 			localGatewayDisabled: this.isLocalGatewayDisabled(),
 			browserUseEnabled: this.isBrowserUseEnabled(),
 		};
@@ -255,58 +255,42 @@ export class InstanceAiSettingsService {
 						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
 						transactionManager,
 					);
+				const previous = this.snapshotAdminSettings();
+				const next = this.mergeAdminSettings(current, settingsUpdate);
+				this.validateAdminSettingsUpdate(settingsUpdate, current);
+
+				// The instance model credential and model name only work as a complete pair
 				const nextModelCredentialId =
 					modelCredentialId === undefined ? currentModelCredentialId : modelCredentialId;
-				const nextUpdate =
-					modelCredentialId === null && settingsUpdate.modelName === undefined
-						? { ...settingsUpdate, modelName: null }
-						: settingsUpdate;
-				const previous = this.snapshotAdminSettings();
-				const next = this.mergeAdminSettings(current, nextUpdate);
-				this.validateAdminSettingsUpdate(nextUpdate, current);
-
-				const modelCredentialChanged =
-					modelCredentialId !== undefined && modelCredentialId !== currentModelCredentialId;
-				if (
-					modelCredentialChanged &&
-					nextModelCredentialId &&
-					settingsUpdate.modelName === undefined
-				) {
-					throw new UnprocessableRequestError(
-						'modelName must be provided when changing modelCredentialId',
-					);
+				const nextModelName =
+					settingsUpdate.modelName !== undefined
+						? settingsUpdate.modelName
+						: modelCredentialId === null
+							? null
+							: current.modelName;
+				if (modelCredentialId !== undefined || settingsUpdate.modelName !== undefined) {
+					if (nextModelCredentialId != null && nextModelName == null) {
+						throw new UnprocessableRequestError(
+							'modelName must be set together with modelCredentialId',
+						);
+					}
+					if (nextModelName != null && nextModelCredentialId == null) {
+						throw new UnprocessableRequestError('modelName requires modelCredentialId');
+					}
 				}
-				if (nextUpdate.modelName && !nextModelCredentialId) {
-					throw new UnprocessableRequestError('modelName requires modelCredentialId');
-				}
-				if (!nextModelCredentialId) next.modelName = null;
+				next.modelName = nextModelName ?? null;
 
-				let modelCredentialType: string | undefined;
 				if (modelCredentialId === null) {
 					await this.instanceCredentialBroker.clearForUse(
 						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
 						transactionManager,
 					);
 				} else if (modelCredentialId !== undefined) {
-					const credential = await this.instanceCredentialBroker.assignForUse(
+					await this.instanceCredentialBroker.assignForUse(
 						INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
 						modelCredentialId,
 						transactionManager,
 					);
-					modelCredentialType = credential.type;
-				}
-				if (
-					nextModelCredentialId &&
-					(modelCredentialChanged || nextUpdate.modelName !== undefined) &&
-					!next.modelName
-				) {
-					modelCredentialType ??= (
-						await this.instanceCredentialBroker.resolveForUse(
-							INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
-							transactionManager,
-						)
-					)?.type;
-					if (modelCredentialType) this.ensureCredentialMatchesConfiguredModel(modelCredentialType);
 				}
 				await this.updateCredentialAssignment(
 					INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
@@ -645,18 +629,6 @@ export class InstanceAiSettingsService {
 		if (!resolved) return null;
 
 		return this.buildModelConfig(resolved.type, resolved.data, modelName);
-	}
-
-	private ensureCredentialMatchesConfiguredModel(credentialType: string): void {
-		const slash = this.config.model.indexOf('/');
-		if (slash < 0) return;
-		const configuredProvider = this.config.model.slice(0, slash);
-		const credentialProvider = CREDENTIAL_TO_MODEL_PROVIDER[credentialType];
-		if (credentialProvider !== configuredProvider) {
-			throw new UnprocessableRequestError(
-				`This credential is for "${credentialProvider}" but the configured model "${this.config.model}" requires a "${configuredProvider}" credential. Select a "${credentialProvider}" model alongside the credential, or set N8N_INSTANCE_AI_MODEL to a "${credentialProvider}" model.`,
-			);
-		}
 	}
 
 	private async buildModelConfigFromCredential(

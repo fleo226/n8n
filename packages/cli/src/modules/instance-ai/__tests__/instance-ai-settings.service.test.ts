@@ -316,14 +316,38 @@ describe('InstanceAiSettingsService', () => {
 
 		it('requires the model name when changing credentials', async () => {
 			await expect(service.updateAdminSettings({ modelCredentialId: 'cred-1' })).rejects.toThrow(
-				'modelName must be provided when changing modelCredentialId',
+				'modelName must be set together with modelCredentialId',
 			);
 			expect(instanceCredentialBroker.assignForUse).not.toHaveBeenCalled();
+		});
+
+		it('rejects a null model name when assigning a credential', async () => {
+			await expect(
+				service.updateAdminSettings({ modelCredentialId: 'cred-1', modelName: null }),
+			).rejects.toThrow('modelName must be set together with modelCredentialId');
+			expect(instanceCredentialBroker.assignForUse).not.toHaveBeenCalled();
+		});
+
+		it('rejects clearing the model name while a credential stays assigned', async () => {
+			instanceCredentialBroker.getAssignedCredentialId.mockResolvedValue('cred-1');
+
+			await expect(service.updateAdminSettings({ modelName: null })).rejects.toThrow(
+				'modelName must be set together with modelCredentialId',
+			);
+			expect(instanceCredentialBroker.clearForUse).not.toHaveBeenCalled();
 		});
 
 		it('rejects a model name without an admin credential', async () => {
 			await expect(service.updateAdminSettings({ modelName: 'gpt-4' })).rejects.toThrow(
 				'modelName requires modelCredentialId',
+			);
+		});
+
+		it('does not block unrelated updates on a legacy half pair', async () => {
+			instanceCredentialBroker.getAssignedCredentialId.mockResolvedValue('cred-1');
+
+			await expect(service.updateAdminSettings({ mcpAccessEnabled: false })).resolves.toMatchObject(
+				{ mcpAccessEnabled: false },
 			);
 		});
 
@@ -423,6 +447,37 @@ describe('InstanceAiSettingsService', () => {
 					}),
 				),
 			).resolves.toEqual({ id: 'openai/gpt-user', url: '', apiKey: 'user-key' });
+		});
+
+		it('falls back to the full user pair when the instance credential fails to resolve', async () => {
+			instanceCredentialBroker.assignForUse.mockResolvedValue({
+				id: 'admin-credential',
+				name: 'Admin model',
+				type: 'openAiApi',
+			});
+			await service.updateAdminSettings({
+				modelCredentialId: 'admin-credential',
+				modelName: 'gpt-admin',
+			});
+			instanceCredentialBroker.resolveForUse.mockRejectedValue(new Error('gone'));
+			credentialsFinderService.findCredentialForUser.mockResolvedValue(
+				mock<CredentialsEntity>({ id: 'user-credential', type: 'openAiApi' }),
+			);
+			credentialsService.decrypt.mockResolvedValue({ apiKey: 'user-key' });
+
+			await expect(
+				service.resolveModelConfig(
+					mock<User>({
+						settings: {
+							instanceAi: { credentialId: 'user-credential', modelName: 'gpt-user' },
+						},
+					}),
+				),
+			).resolves.toEqual({ id: 'openai/gpt-user', url: '', apiKey: 'user-key' });
+			expect(logger.warn).toHaveBeenCalledWith(
+				'Could not resolve the configured model credential; using environment fallback',
+				{ credentialUseId: 'instance-ai:model', error: 'gone' },
+			);
 		});
 
 		it('skips an instance credential assignment without an instance model', async () => {
