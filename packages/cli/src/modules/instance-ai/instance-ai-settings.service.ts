@@ -22,7 +22,10 @@ import { jsonParse } from 'n8n-workflow';
 
 import { CredentialsFinderService } from '@/credentials/credentials-finder.service';
 import { CredentialsService } from '@/credentials/credentials.service';
-import { InstanceCredentialBroker } from '@/credentials/instance-credential-broker';
+import {
+	InstanceCredentialBroker,
+	type ResolvedInstanceCredential,
+} from '@/credentials/instance-credential-broker';
 import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
 import { EventService } from '@/events/event.service';
 import { AiService } from '@/services/ai.service';
@@ -438,16 +441,10 @@ export class InstanceAiSettingsService {
 			apiUrl: daytonaApiUrl || undefined,
 			apiKey: daytonaApiKey || undefined,
 		};
-		const resolved = await this.instanceCredentialBroker
-			.resolveForUse(INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id)
-			.catch((error: unknown) => {
-				this.warnCredentialFallback(
-					'Daytona sandbox',
-					INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
-					error,
-				);
-				return null;
-			});
+		const resolved = await this.resolveServiceCredential(
+			INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY,
+			'Daytona sandbox',
+		);
 		if (!resolved) return envConfig;
 		const { data } = resolved;
 		const apiUrl = typeof data.apiUrl === 'string' ? data.apiUrl : undefined;
@@ -456,7 +453,7 @@ export class InstanceAiSettingsService {
 			this.warnCredentialFallback(
 				'Daytona sandbox',
 				INSTANCE_AI_DAYTONA_CREDENTIAL_POLICY.id,
-				new Error('Credential data is incomplete'),
+				'Credential data is incomplete',
 			);
 			return envConfig;
 		}
@@ -469,26 +466,28 @@ export class InstanceAiSettingsService {
 			serviceUrl: n8nSandboxServiceUrl || undefined,
 			apiKey: n8nSandboxServiceApiKey || undefined,
 		};
-		const resolved = await this.instanceCredentialBroker
-			.resolveForUse(INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id)
-			.catch((error: unknown) => {
-				this.warnCredentialFallback(
-					'n8n Sandbox',
-					INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
-					error,
-				);
-				return null;
-			});
+		const resolved = await this.resolveServiceCredential(
+			INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY,
+			'n8n Sandbox',
+		);
 		if (!resolved) return envConfig;
 
 		const { data } = resolved;
 		const headerName = typeof data.name === 'string' ? data.name.trim().toLowerCase() : '';
 		const apiKey = typeof data.value === 'string' ? data.value : undefined;
-		if (headerName !== 'x-api-key' || !apiKey) {
+		if (headerName !== 'x-api-key') {
 			this.warnCredentialFallback(
 				'n8n Sandbox',
 				INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
-				new Error('Credential data is incomplete'),
+				`Credential header must be "x-api-key" but is "${headerName || '(empty)'}"`,
+			);
+			return envConfig;
+		}
+		if (!apiKey) {
+			this.warnCredentialFallback(
+				'n8n Sandbox',
+				INSTANCE_AI_N8N_SANDBOX_CREDENTIAL_POLICY.id,
+				'Credential data is incomplete',
 			);
 			return envConfig;
 		}
@@ -502,12 +501,10 @@ export class InstanceAiSettingsService {
 			braveApiKey: braveSearchApiKey || undefined,
 			searxngUrl: searxngUrl || undefined,
 		};
-		const resolved = await this.instanceCredentialBroker
-			.resolveForUse(INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id)
-			.catch((error: unknown) => {
-				this.warnCredentialFallback('search', INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id, error);
-				return null;
-			});
+		const resolved = await this.resolveServiceCredential(
+			INSTANCE_AI_SEARCH_CREDENTIAL_POLICY,
+			'search',
+		);
 		if (!resolved) return envConfig;
 		const { type, data } = resolved;
 		if (type === 'braveSearchApi' && typeof data.apiKey === 'string' && data.apiKey) {
@@ -519,17 +516,29 @@ export class InstanceAiSettingsService {
 		this.warnCredentialFallback(
 			'search',
 			INSTANCE_AI_SEARCH_CREDENTIAL_POLICY.id,
-			new Error('Credential data is incomplete'),
+			'Credential data is incomplete',
 		);
 		return envConfig;
 	}
 
-	private warnCredentialFallback(service: string, credentialUseId: string, error: unknown): void {
+	/** Resolve a service's instance credential; null means fall back to environment configuration. */
+	private async resolveServiceCredential(
+		policy: { id: string },
+		service: string,
+	): Promise<ResolvedInstanceCredential | null> {
+		if (this.isCloud || this.aiService.isProxyEnabled()) return null;
+		return await this.instanceCredentialBroker.resolveForUse(policy.id).catch((error: unknown) => {
+			this.warnCredentialFallback(service, policy.id, ensureError(error).message);
+			return null;
+		});
+	}
+
+	private warnCredentialFallback(service: string, credentialUseId: string, reason: string): void {
 		Container.get(Logger)
 			.scoped('instance-ai')
 			.warn(`Could not resolve the configured ${service} credential; using environment fallback`, {
 				credentialUseId,
-				error: ensureError(error).message,
+				error: reason,
 			});
 	}
 
@@ -629,17 +638,13 @@ export class InstanceAiSettingsService {
 	}
 
 	private async resolveAdminModelConfig(modelName: string): Promise<ModelConfig | null> {
-		if (this.isCloud || this.aiService.isProxyEnabled()) return null;
-		const resolved = await this.resolveModelCredential();
+		const resolved = await this.resolveServiceCredential(
+			INSTANCE_AI_MODEL_CREDENTIAL_POLICY,
+			'model',
+		);
 		if (!resolved) return null;
 
 		return this.buildModelConfig(resolved.type, resolved.data, modelName);
-	}
-
-	private async resolveModelCredential() {
-		return await this.instanceCredentialBroker.resolveForUse(
-			INSTANCE_AI_MODEL_CREDENTIAL_POLICY.id,
-		);
 	}
 
 	private ensureCredentialMatchesConfiguredModel(credentialType: string): void {
@@ -710,6 +715,12 @@ export class InstanceAiSettingsService {
 		'searchCredentialId',
 	];
 
+	/** User preference fields sourced from environment variables only. */
+	private static readonly MANAGED_PREFERENCE_FIELDS: readonly string[] = [
+		'credentialId',
+		'modelName',
+	];
+
 	private async updateCredentialAssignment(
 		credentialUseId: string,
 		credentialId: string | null | undefined,
@@ -726,12 +737,6 @@ export class InstanceAiSettingsService {
 			);
 		}
 	}
-
-	/** User preference fields sourced from environment variables only. */
-	private static readonly MANAGED_PREFERENCE_FIELDS: readonly string[] = [
-		'credentialId',
-		'modelName',
-	];
 
 	/** Label for the deployment surface that owns the env-managed config, used in error messages. */
 	private deploymentLabel(): string {
