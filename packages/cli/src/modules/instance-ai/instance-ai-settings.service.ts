@@ -201,13 +201,14 @@ export class InstanceAiSettingsService {
 				]);
 		const [modelCredentialId, daytonaCredentialId, n8nSandboxCredentialId, searchCredentialId] =
 			credentialIds;
+		const sandboxProvider = normalizeSandboxProvider(c.sandboxProvider);
 		return {
 			enabled: this.enabled,
 			permissions: { ...this.permissions },
 			mcpServers: c.mcpServers,
 			mcpAccessEnabled: this.mcpAccessEnabled,
 			sandboxEnabled: c.sandboxEnabled,
-			sandboxProvider: normalizeSandboxProvider(c.sandboxProvider),
+			sandboxProvider,
 			sandboxImage: c.sandboxImage,
 			sandboxTimeout: c.sandboxTimeout,
 			daytonaCredentialId,
@@ -215,6 +216,12 @@ export class InstanceAiSettingsService {
 			searchCredentialId,
 			modelCredentialId,
 			modelName: isManaged ? null : this.adminModelName,
+			modelEnvConfigured: Boolean(c.modelApiKey.trim() || c.modelUrl.trim()),
+			sandboxEnvConfigured:
+				sandboxProvider === 'daytona'
+					? Boolean(c.daytonaApiKey.trim())
+					: Boolean(c.n8nSandboxServiceUrl.trim() && c.n8nSandboxServiceApiKey.trim()),
+			searchEnvConfigured: Boolean(c.braveSearchApiKey.trim() || c.searxngUrl.trim()),
 			localGatewayDisabled: this.isLocalGatewayDisabled(),
 			browserUseEnabled: this.isBrowserUseEnabled(),
 		};
@@ -269,12 +276,15 @@ export class InstanceAiSettingsService {
 							? null
 							: current.modelName;
 				if (modelCredentialId !== undefined || settingsUpdate.modelName !== undefined) {
-					if (nextModelCredentialId != null && nextModelName == null) {
+					const hasCredential =
+						nextModelCredentialId !== null && nextModelCredentialId !== undefined;
+					const hasModelName = nextModelName !== null && nextModelName !== undefined;
+					if (hasCredential && !hasModelName) {
 						throw new UnprocessableRequestError(
 							'modelName must be set together with modelCredentialId',
 						);
 					}
-					if (nextModelName != null && nextModelCredentialId == null) {
+					if (hasModelName && !hasCredential) {
 						throw new UnprocessableRequestError('modelName requires modelCredentialId');
 					}
 				}

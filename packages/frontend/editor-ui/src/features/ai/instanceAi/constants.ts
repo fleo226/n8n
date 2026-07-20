@@ -1,8 +1,22 @@
 export const INSTANCE_AI_VIEW = 'InstanceAi';
 export const INSTANCE_AI_THREAD_VIEW = 'InstanceAiThread';
 export const INSTANCE_AI_SETTINGS_VIEW = 'InstanceAiSettings';
-export const INSTANCE_AI_CREDENTIALS_SETTINGS_VIEW = 'InstanceAiCredentialsSettings';
 export const INSTANCE_AI_PROJECT_ID_QUERY = 'projectId';
+
+export const INSTANCE_MODEL_CREDENTIAL_TYPES = [
+	'openAiApi',
+	'anthropicApi',
+	'googlePalmApi',
+	'ollamaApi',
+	'groqApi',
+	'deepSeekApi',
+	'mistralCloudApi',
+	'xAiApi',
+	'openRouterApi',
+	'cohereApi',
+] as const;
+
+export const INSTANCE_SEARCH_CREDENTIAL_TYPES = ['braveSearchApi', 'searXngApi'] as const;
 export const INSTANCE_AI_NEW_VIEW = 'InstanceAiNew';
 export const NEW_CONVERSATION_TITLE = 'New conversation';
 export { AI_GATEWAY_MANAGED_TAG } from '@n8n/api-types';

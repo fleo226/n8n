@@ -4,8 +4,8 @@ import { fireEvent, waitFor } from '@testing-library/vue';
 import { createTestingPinia } from '@pinia/testing';
 import { setActivePinia } from 'pinia';
 import { createComponentRenderer } from '@/__tests__/render';
-import SettingsInstanceAiCredentialsView from '../views/SettingsInstanceAiCredentialsView.vue';
 import SettingsInstanceAiView from '../views/SettingsInstanceAiView.vue';
+import ModelCredentialDialog from '../components/settings/ModelCredentialDialog.vue';
 import { useInstanceAiSettingsStore } from '../instanceAiSettings.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
@@ -79,7 +79,7 @@ vi.mock('@/experiments/instanceAiComputerUse', () => ({
 }));
 
 const renderComponent = createComponentRenderer(SettingsInstanceAiView);
-const renderCredentialsComponent = createComponentRenderer(SettingsInstanceAiCredentialsView);
+const renderModelDialog = createComponentRenderer(ModelCredentialDialog);
 
 function setModuleSettings(
 	settingsStore: ReturnType<typeof useSettingsStore>,
@@ -133,15 +133,16 @@ describe('SettingsInstanceAiView', () => {
 				searchCredentialId: null,
 				modelCredentialId: null,
 				modelName: null,
+				modelEnvConfigured: false,
+				sandboxEnvConfigured: false,
+				searchEnvConfigured: false,
 				localGatewayDisabled: false,
 			},
 		});
 	});
 
-	describe('Model credential settings', () => {
+	describe('Model credential dialog', () => {
 		it('stages a provider switch and only saves once a model name is committed', async () => {
-			const { getByTestId, getByText } = renderCredentialsComponent();
-			await waitFor(() => expect(store.isLoading).toBe(false));
 			store.$patch({
 				settings: {
 					...store.settings!,
@@ -159,27 +160,25 @@ describe('SettingsInstanceAiView', () => {
 				],
 			});
 			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			const { getByTestId, getByText } = renderModelDialog({ props: { open: true } });
 			await nextTick();
 
 			const select = getByTestId('n8n-agent-model-credential-select');
 			await fireEvent.click(select.querySelector('input')!);
 			await fireEvent.click(getByText('Anthropic production · Anthropic'));
 
-			expect(store.draft).toMatchObject({
-				modelCredentialId: 'anthropic-id',
-				modelName: null,
-			});
+			// Switching provider clears the model name, so saving is blocked until it is set.
+			const saveButton = getByTestId('n8n-agent-model-dialog-save');
+			expect(saveButton).toBeDisabled();
+			expect(save).not.toHaveBeenCalled();
 
 			const modelNameField = getByTestId('n8n-agent-model-name-input');
 			const modelNameInput =
 				modelNameField.tagName === 'INPUT'
 					? (modelNameField as HTMLInputElement)
 					: modelNameField.querySelector('input')!;
-			await fireEvent.blur(modelNameInput);
-			expect(save).not.toHaveBeenCalled();
-
 			await fireEvent.update(modelNameInput, 'claude-sonnet-4');
-			await fireEvent.keyUp(modelNameInput, { key: 'Enter' });
+			await fireEvent.click(saveButton);
 
 			expect(store.draft).toMatchObject({
 				modelCredentialId: 'anthropic-id',
@@ -189,36 +188,48 @@ describe('SettingsInstanceAiView', () => {
 		});
 	});
 
-	describe('env-only config', () => {
-		// Search, sandbox, and advanced options remain environment-managed.
-		it.each([
-			['search', 'instanceAi.settings.section.search'],
-			['sandbox', 'instanceAi.settings.section.sandbox'],
-			['advanced', 'instanceAi.settings.section.advanced'],
-		])('does not render the %s config section', (_name, titleKey) => {
-			const { queryByText } = renderComponent();
-			expect(queryByText(titleKey)).toBeNull();
-		});
-
-		it('renders the Permissions section', () => {
-			const { getByText } = renderComponent();
-			expect(getByText('settings.n8nAgent.permissions.title')).toBeVisible();
-		});
-
+	describe('status row', () => {
 		it('renders the enabled status action', () => {
-			const { getByTestId } = renderComponent();
+			store.$patch({
+				settings: {
+					...store.settings!,
+					modelCredentialId: 'openai-id',
+					modelEnvConfigured: true,
+					sandboxEnvConfigured: true,
+				},
+			});
+			const { getByTestId, getByText } = renderComponent();
 			expect(getByTestId('n8n-agent-status-menu')).toBeVisible();
+			expect(getByText('settings.n8nAgent.status.enabled')).toBeVisible();
+		});
+
+		it('shows setup required while model or sandbox are unconfigured', () => {
+			const { getByTestId, getByText } = renderComponent();
+			expect(getByTestId('n8n-agent-status-menu')).toBeVisible();
+			expect(getByText('settings.n8nAgent.status.setupRequired')).toBeVisible();
+		});
+
+		it('shows an enable button with dimmed sections when disabled but configured', () => {
+			store.$patch({
+				settings: { ...store.settings!, enabled: false, modelCredentialId: 'openai-id' },
+			});
+			setModuleSettings(settingsStore, { ...defaultModuleSettings, enabled: false });
+
+			const { getByTestId, getByText, queryByTestId } = renderComponent();
+			expect(getByTestId('n8n-agent-enable-button')).toBeVisible();
+			expect(queryByTestId('n8n-agent-status-menu')).toBeNull();
+			expect(getByText('settings.n8nAgent.permissions.title')).toBeVisible();
 		});
 	});
 
-	describe('isEnabled fallback for non-admin users', () => {
-		it('falls back to moduleSettings when store.settings is null', () => {
-			store.$patch({ settings: null });
-			setModuleSettings(settingsStore, { ...defaultModuleSettings, enabled: true });
+	describe('empty state', () => {
+		it('shows the empty state when disabled and never configured', () => {
+			store.$patch({ settings: { ...store.settings!, enabled: false } });
+			setModuleSettings(settingsStore, { ...defaultModuleSettings, enabled: false });
 
-			const { getByText } = renderComponent();
-			// When enabled, the local gateway section should render
-			expect(getByText('settings.n8nAgent.permissions.title')).toBeVisible();
+			const { getByText, queryByText } = renderComponent();
+			expect(getByText('settings.n8nAgent.empty.title')).toBeVisible();
+			expect(queryByText('settings.n8nAgent.permissions.title')).toBeNull();
 		});
 
 		it('hides content when disabled via moduleSettings fallback', () => {
@@ -227,6 +238,53 @@ describe('SettingsInstanceAiView', () => {
 
 			const { queryByText } = renderComponent();
 			expect(queryByText('settings.n8nAgent.permissions.title')).toBeNull();
+		});
+
+		it('falls back to moduleSettings when store.settings is null', () => {
+			store.$patch({ settings: null });
+			setModuleSettings(settingsStore, { ...defaultModuleSettings, enabled: true });
+
+			const { getByText } = renderComponent();
+			expect(getByText('settings.n8nAgent.permissions.title')).toBeVisible();
+		});
+	});
+
+	describe('credential rows', () => {
+		it('shows add buttons when nothing is configured', () => {
+			const { getByTestId } = renderComponent();
+			expect(getByTestId('n8n-agent-model-add')).toBeVisible();
+			expect(getByTestId('n8n-agent-sandbox-add')).toBeVisible();
+			expect(getByTestId('n8n-agent-search-setup')).toBeVisible();
+		});
+
+		it('shows the configured model value once a credential pair is set', () => {
+			store.$patch({
+				settings: { ...store.settings!, modelCredentialId: 'openai-id', modelName: 'gpt-4o' },
+				instanceModelCredentials: [
+					{ id: 'openai-id', name: 'OpenAI', type: 'openAiApi', provider: 'openai' },
+				],
+			});
+
+			const { getByText, queryByTestId } = renderComponent();
+			expect(queryByTestId('n8n-agent-model-add')).toBeNull();
+			expect(getByText('OpenAI · gpt-4o')).toBeVisible();
+		});
+
+		it('marks env-managed search instead of offering setup', () => {
+			store.$patch({ settings: { ...store.settings!, searchEnvConfigured: true } });
+
+			const { getByText, queryByTestId } = renderComponent();
+			expect(queryByTestId('n8n-agent-search-setup')).toBeNull();
+			expect(getByText('settings.n8nAgent.search.managedByEnv')).toBeVisible();
+		});
+
+		it('hides credential rows on managed deployments', () => {
+			setModuleSettings(settingsStore, { ...defaultModuleSettings, proxyEnabled: true });
+
+			const { queryByTestId } = renderComponent();
+			expect(queryByTestId('n8n-agent-model-row')).toBeNull();
+			expect(queryByTestId('n8n-agent-sandbox-row')).toBeNull();
+			expect(queryByTestId('n8n-agent-search-row')).toBeNull();
 		});
 	});
 
@@ -277,16 +335,21 @@ describe('SettingsInstanceAiView', () => {
 			expect(save).toHaveBeenCalled();
 		});
 
-		it('shows the Execute MCP tools permission when MCP access is enabled', () => {
-			const { getByTestId } = renderComponent();
-			expect(getByTestId('n8n-agent-permission-executeMcpTool')).toBeVisible();
+		it('shows the Execute MCP tools permission when the group is expanded', async () => {
+			const { getByTestId, getByLabelText } = renderComponent();
+
+			await fireEvent.click(getByLabelText('Toggle settings.n8nAgent.permissions.group.mcp'));
+
+			await waitFor(() => expect(getByTestId('n8n-agent-permission-executeMcpTool')).toBeVisible());
 		});
 
-		it('hides the Execute MCP tools permission when MCP access is disabled', () => {
+		it('locks the MCP permission group when MCP access is disabled', () => {
 			store.$patch({ settings: { ...store.settings!, mcpAccessEnabled: false } });
 
-			const { queryByTestId } = renderComponent();
+			const { getByText, queryByTestId, queryByLabelText } = renderComponent();
 
+			expect(getByText('settings.n8nAgent.permissions.group.mcpDisabled')).toBeVisible();
+			expect(queryByLabelText('Toggle settings.n8nAgent.permissions.group.mcp')).toBeNull();
 			expect(queryByTestId('n8n-agent-permission-executeMcpTool')).toBeNull();
 		});
 
@@ -296,7 +359,49 @@ describe('SettingsInstanceAiView', () => {
 			const { queryByTestId } = renderComponent();
 
 			expect(queryByTestId('n8n-agent-mcp-access-toggle')).toBeNull();
-			expect(queryByTestId('n8n-agent-permission-executeMcpTool')).toBeNull();
+			expect(queryByTestId('n8n-agent-permission-group-mcp')).toBeNull();
+		});
+	});
+
+	describe('Permissions groups', () => {
+		it('renders a row per permission group', () => {
+			const { getByTestId } = renderComponent();
+			for (const group of ['workflows', 'folders', 'dataTables', 'credentials', 'system', 'web']) {
+				expect(getByTestId(`n8n-agent-permission-group-${group}`)).toBeVisible();
+			}
+		});
+
+		it('summarises non-default permissions as exceptions', () => {
+			store.$patch({
+				settings: {
+					...store.settings!,
+					permissions: { createWorkflow: 'always_allow', deleteWorkflow: 'blocked' },
+				},
+			});
+
+			const { getByTestId } = renderComponent();
+			expect(getByTestId('n8n-agent-permission-group-workflows').textContent).toContain(
+				'settings.n8nAgent.permissions.group.exceptions',
+			);
+			expect(getByTestId('n8n-agent-permission-group-folders').textContent).toContain(
+				'settings.n8nAgent.permissions.group.default',
+			);
+		});
+
+		it('persists a permission change from an expanded group', async () => {
+			const setPermission = vi.spyOn(store, 'setPermission');
+			const save = vi.spyOn(store, 'save').mockResolvedValue();
+			const { getByTestId, getByLabelText, getAllByText } = renderComponent();
+
+			await fireEvent.click(getByLabelText('Toggle settings.n8nAgent.permissions.group.folders'));
+			await waitFor(() => expect(getByTestId('n8n-agent-permission-createFolder')).toBeVisible());
+
+			const select = getByTestId('n8n-agent-permission-createFolder');
+			await fireEvent.click(select.querySelector('input')!);
+			await fireEvent.click(getAllByText('settings.n8nAgent.permissions.alwaysAllow')[0]);
+
+			expect(setPermission).toHaveBeenCalledWith('createFolder', 'always_allow');
+			expect(save).toHaveBeenCalled();
 		});
 	});
 });
